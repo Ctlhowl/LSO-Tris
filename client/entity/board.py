@@ -6,7 +6,6 @@ class Board:
     def __init__(self, screen):
         self.screen = screen
         self.board = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
-        self.graphical_board = [[[None, None] for _ in range(3)] for _ in range(3)]
 
         self.board_offset_x = 225
         self.board_offset_y = 255

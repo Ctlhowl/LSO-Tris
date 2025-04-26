@@ -2,7 +2,7 @@ import pygame, sys, uuid
 from entity.window import Window
 from entity.board import Board
 from entity.button import Button
-from network.client_socket import ClientSocket
+from network.server_socket import ServerSocket
 
 from config.settings import *
 
@@ -27,6 +27,7 @@ def tris_window():
                     run = False
                 else:
                     tris_board.add_XO()
+                    
  
         tris_window.update()
         tris_board.update()
@@ -117,7 +118,6 @@ def nickname_window():
     if nickname == '':
         nickname = "guest_" + uuid.uuid1()
     
-    print(nickname)
     return nickname
 
 
@@ -126,13 +126,13 @@ if __name__ == "__main__":
 
     nickname = nickname_window()
     if  nickname != None:
-        client = ClientSocket(SERVER, PORT, DISCONNECT_MESSAGE)
-        client.connect()
-        client.send_msg(nickname)
+        server = ServerSocket(SERVER, PORT, DISCONNECT_MESSAGE)
+        server.connect()
+        server.send_msg(nickname)
 
         menu_window()
         
-        client.close()
+        server.close()
     
 
     pygame.quit()

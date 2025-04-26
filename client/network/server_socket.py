@@ -1,6 +1,6 @@
 import socket
 
-class ClientSocket:
+class ServerSocket:
     def __init__(self, server, port, disconnected_message):
         self.header = 64
         self.format = 'utf-8'
