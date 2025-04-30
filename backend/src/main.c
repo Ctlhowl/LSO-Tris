@@ -68,7 +68,7 @@ void* accept_clients(void* arg) {
     printf("New connection on socket %d\n", client_sock);
 
     // Invio richiesta login
-    json_t* request = create_request("login", "Please send your username");
+    json_t* request = create_request("login", "Please send your username", NULL);
     if (!request) {
         perror("create request failed");
         close(client_sock);
@@ -86,16 +86,12 @@ void* accept_clients(void* arg) {
         json_t* response = receive_json(client_sock);
         if (!response) {
             perror("receive failed");
-            close(client_sock);
-            return NULL;
-        }
-    
-    
-        // Valuta risposta
-        json_t *json_method = json_object_get(response, "method");
-        json_t *json_user = json_object_get(response, "username");
-        
-        if (json_is_string(json_user) && json_is_string(json_method)) {
+            send_error(client_sock, "400", "Invalid Method");
+        }else{
+            // Valuta risposta
+            json_t *json_method = json_object_get(response, "method");
+            json_t *json_user = json_object_get(response, "username");
+            
             if(handle_login(&server, client_sock, json_method, json_user)){
                 
                 // Gestione routing
@@ -110,8 +106,8 @@ void* accept_clients(void* arg) {
                     handle_route(&server, client_sock, username, response);
                 }
             }
-        }
+        }    
     }
-    
+
     return NULL;
 }

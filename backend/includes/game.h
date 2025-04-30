@@ -11,7 +11,7 @@ typedef enum {
 } game_state_t;
 
 typedef struct {
-    ssize_t id;
+    size_t id;
     char player1[64];   // First player name
     char player2[64];   // Second player name
     char board[3][3];
@@ -35,7 +35,11 @@ extern game_list_t* game_list;
 
 void game_init(server_t* server);
 void game_cleanup(server_t* server);
-int create_game(server_t* server, const char* player1);
 
-json_t* create_json(server_t* server, ssize_t id);
+ssize_t create_game(server_t* server, const char* player1);
+short request_join_game(server_t* server, size_t game_id, const char *player2);
+short accept_join_request(server_t* server, size_t game_id, const char *player2);
+
+json_t* create_json(server_t* server, size_t id);
+
 #endif

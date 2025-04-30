@@ -78,7 +78,7 @@ bool client_add(server_t* server, const client_t* client) {
     connected_clients->head = new_node;
     connected_clients->count++;
     
-    printf("New client connected: %s (socket %d)\n", client->username, client->socket);
+    printf("New client connected: %s (socket %ld)\n", client->username, client->socket);
     
     pthread_mutex_unlock(&server->clients_mutex);
     return true;
@@ -97,7 +97,7 @@ bool client_remove(server_t* server, const ssize_t socket) {
     while (current) {
         if (current->client.socket == socket) {
             *pp = current->next;
-            printf("Client disconnected: %s (socket %d)\n", current->client.username, current->client.socket);
+            printf("Client disconnected: %s (socket %ld)\n", current->client.username, current->client.socket);
                         
             close(current->client.socket);
             free(current);

@@ -121,31 +121,41 @@ bool send_json_message(json_t* json_data, const int sock) {
 }
 
 bool send_error(const int client_sock, const char* code_error, const char* description){
-    json_t* json_data = json_object();
-    if (!json_data) return NULL;
+    json_t* msg = json_object();
+    if (!msg){
+        perror("json creation failed");
+        return NULL;
+    }
 
-    json_object_set_new(json_data, "error:", json_string(code_error));
-    json_object_set_new(json_data, "description", json_string(description));    
+    json_object_set_new(msg, "error:", json_string(code_error));
+    json_object_set_new(msg, "description", json_string(description));    
     
-    if (!send_json_message(json_data, client_sock)) {
+    if (!send_json_message(msg, client_sock)) {
         perror("send error failed");
         
         return false;
     } 
     
-    free(json_data);
+    free(msg);
     return true;
 }
 
 /**
  * Crea una richiesta standard in formato json specificando il tipo di richiesta e una descrizione
  */
-json_t* create_request(const char* request_type, const char* description) {
+json_t* create_request(const char* request_type, const char* description, json_t* game_param) {
     json_t* msg = json_object();
-    if (!msg) return NULL;
+    if (!msg){
+        perror("json creation failed");
+        return NULL;
+    }
 
     json_object_set_new(msg, "request", json_string(request_type));
     json_object_set_new(msg, "message", json_string(description));
+    
+    if(game_param){
+        json_object_update(msg, game_param);
+    }
     
     return msg;
 }
@@ -155,7 +165,10 @@ json_t* create_request(const char* request_type, const char* description) {
  */
 json_t* create_response(const char* request_type, const char* description, json_t* game_param) {
     json_t* msg = json_object();
-    if (!msg) return NULL;
+    if (!msg){
+        perror("json creation failed");
+        return NULL;
+    }
 
     json_object_set_new(msg, "response", json_string(request_type));
     json_object_set_new(msg, "message", json_string(description));
@@ -166,6 +179,29 @@ json_t* create_response(const char* request_type, const char* description, json_
 
     return msg;
 }
+
+
+/**
+ * Crea un messaggio evento 
+ */
+ json_t* create_event(const char* event_type, size_t game_id, json_t* game_param) {
+    json_t* msg = json_object();
+    if (!msg){
+        perror("json creation failed");
+        return NULL;
+    }
+
+    json_object_set_new(msg, "event", json_string(event_type));
+    json_object_set_new(msg, "game_id", json_integer(game_id));
+
+    if(game_param){
+        json_object_update(msg, game_param);
+    }
+
+    return msg;
+}
+
+
 
 json_t* receive_json(const int socket_fd) {
     /*
@@ -205,7 +241,7 @@ json_t* receive_json(const int socket_fd) {
     json_error_t error;
     json_t *root = json_loads(buffer, 0, &error);
 
-    if(!root)return NULL;
+    if(!root) return NULL;
 
     return root;
 }
