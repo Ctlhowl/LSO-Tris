@@ -1,35 +1,42 @@
+# Compilatore
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 $(shell pkg-config --cflags jansson)
-LDFLAGS = $(shell pkg-config --libs jansson) -lpthread
-DEBUG_FLAGS = -g -O0
-RELEASE_FLAGS = -O2
 
-SRC_DIR = .
-SRCS = $(wildcard $(SRC_DIR)/*.c)
-OBJS = $(SRCS:.c=.o)
-DEPS = $(OBJS:.o=.d)
+# Opzioni di compilazione
+CFLAGS = -Wall -Wextra -std=c11 -I./includes 
 
-TARGET = tic_tac_toe_server
+# Librerie da linkare
+LDFLAGS = -ljansson -lpthread
 
-all: debug
+# Nome dell'eseguibile finale
+TARGET = tris_server
 
-debug: CFLAGS += $(DEBUG_FLAGS)
-debug: $(TARGET)
+# Directory dei file oggetto
+OBJDIR = src/obj
 
-release: CFLAGS += $(RELEASE_FLAGS)
-release: $(TARGET)
+# File sorgenti e oggetti
+SRCS = src/client.c src/server.c src/game.c src/main.c src/messages.c src/routing.c
+OBJS = $(SRCS:src/%.c=$(OBJDIR)/%.o)
 
+# Header files
+HEADERS = includes/client.h includes/server.h includes/game.h includes/messages.h includes/routing.h
+
+# Regola predefinita
+all: $(OBJDIR) $(TARGET)
+
+# Crea la directory degli oggetti
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
+
+# Link dell'eseguibile
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDFLAGS)
 
-%.o: %.c
-	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+# Regola generica per compilare .c -> .o
+$(OBJDIR)/%.o: src/%.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
 
--include $(DEPS)
-
+# Pulizia
 clean:
-	rm -f $(OBJS) $(DEPS) $(TARGET)
+	clear; rm -rfv $(OBJDIR)/*.o; rm -fv $(TARGET)
 
-rebuild: clean all
-
-.PHONY: all debug release clean rebuild
+.PHONY: all clean distclean

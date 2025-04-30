@@ -11,16 +11,15 @@
 #define DEFAULT_PORT 8080
 
 typedef struct {
-    int socket_fd;
+    ssize_t socket_fd;
+    bool running;
     struct sockaddr_in address;
     pthread_mutex_t clients_mutex;
     pthread_mutex_t games_mutex;
-    bool running;
 } server_t;
 
-void server_init(server_t *config, int port);
-int server_start(server_t *config);
-void server_stop(server_t* server);
-void server_cleanup(server_t *config);
+void server_init(server_t *server, int port);
+bool server_start(server_t *server);
+void server_close(server_t *server);
 
 #endif

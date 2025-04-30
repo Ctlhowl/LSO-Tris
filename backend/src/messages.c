@@ -1,0 +1,211 @@
+#include "messages.h"
+
+#include <string.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+
+#include "client.h"
+
+//============ METODI PRIVATI ==================//
+
+/**
+ * Garantisce che tutti i dati vengano inviati correttamente su un socket, anche quando la funzione send() non invia tutto in una sola volta
+ * Dopo ogni chiamata a send() la funzione verifica quanti byte sono stati effettivamente inviati.
+ * Se non sono stati inviati tutti i byte, continua a inviare i dati rimanenti
+*/
+bool send_all_bytes(const int sock, const void *buffer, const size_t length) {
+    size_t total_sent = 0;
+    const char *ptr = buffer;
+
+    while (total_sent < length) {
+        ssize_t sent = send(sock, ptr + total_sent, length - total_sent, 0);
+        if (sent <= 0) {
+            return false;
+        }
+        total_sent += sent;
+    }
+
+    return true;
+}
+
+
+//============ INTERFACCIA PUBBLICA ==================//
+
+/**
+ * Invia un messaggio in broadcast a tutti i client connessi escluso uno
+ */
+bool send_broadcast(server_t* server, json_t* json_data,  const int exclude_client) {
+    if (!json_data) return false;
+
+    pthread_mutex_lock(&server->clients_mutex);
+    
+    // Invio messaggi a tutti i client
+    client_node_t* current = connected_clients->head;
+    while (current) {
+        int sock = current->client.socket;
+
+        if (sock != exclude_client) {
+            if (!send_json_message(json_data, sock)) {
+                perror("broadcast send failed");
+
+                pthread_mutex_unlock(&server->clients_mutex);
+                return false;
+            }
+        }
+        current = current->next;
+    }
+    
+    pthread_mutex_unlock(&server->clients_mutex);
+    free(json_data);
+    return true;
+}
+
+/**
+ * Invia un messaggio ad uno specifico player
+ */
+bool send_to_player(server_t* server, json_t* json_data, const char* username) {
+    if (!username || !json_data) return false;
+
+    pthread_mutex_lock(&server->clients_mutex);
+    
+    client_node_t* current = connected_clients->head;
+    while (current) {
+        if (strcmp(current->client.username, username) == 0) {
+            int sock = current->client.socket;
+            if (!send_json_message(json_data, sock)) {
+                perror("send_to_player failed");
+
+                pthread_mutex_unlock(&server->clients_mutex);
+                return false;
+            }
+
+            break;
+        }
+        current = current->next;
+    }
+    
+    pthread_mutex_unlock(&server->clients_mutex);
+    free(json_data);
+    return true;
+}
+
+
+/**
+ * Invia un messaggio JSON aggiungendo un delimitatore di fine (come \n) assicurandosi che l'intero messaggio venga inviato
+ * anche se la rete o la connessione non permettono di inviarlo tutto in un'unica volta.
+ * Ritorna 0 se il messaggio è stato inviato correttamente, -1 altrimenti.
+ */
+bool send_json_message(json_t* json_data, const int sock) {
+    if (!json_data || sock < 0) return false;
+
+    // Serializzazione il JSON
+    char* json_str = json_dumps(json_data, JSON_COMPACT);
+    if (!json_str) return false;
+
+    //Calcolo della lunghezza (size_t in network byte order)
+    size_t json_len = strlen(json_str);
+    size_t net_len = htonl(json_len);  // Conversione a network byte order
+
+    //Invio lunghezza del messaggio
+    if (!send_all_bytes(sock, &net_len, sizeof(net_len))) {
+        free(json_str);
+        return false;
+    }
+
+    //Invio del JSON
+    int result = send_all_bytes(sock, json_str, json_len);
+    free(json_str);
+    return result;
+}
+
+bool send_error(const int client_sock, const char* code_error, const char* description){
+    json_t* json_data = json_object();
+    if (!json_data) return NULL;
+
+    json_object_set_new(json_data, "error:", json_string(code_error));
+    json_object_set_new(json_data, "description", json_string(description));    
+    
+    if (!send_json_message(json_data, client_sock)) {
+        perror("send error failed");
+        
+        return false;
+    } 
+    
+    free(json_data);
+    return true;
+}
+
+/**
+ * Crea una richiesta standard in formato json specificando il tipo di richiesta e una descrizione
+ */
+json_t* create_request(const char* request_type, const char* description) {
+    json_t* msg = json_object();
+    if (!msg) return NULL;
+
+    json_object_set_new(msg, "request", json_string(request_type));
+    json_object_set_new(msg, "message", json_string(description));
+    
+    return msg;
+}
+
+/**
+ * Crea una risposta standard in formato json specificando il tipo di risposta e una descrizione
+ */
+json_t* create_response(const char* request_type, const char* description, json_t* game_param) {
+    json_t* msg = json_object();
+    if (!msg) return NULL;
+
+    json_object_set_new(msg, "response", json_string(request_type));
+    json_object_set_new(msg, "message", json_string(description));
+    
+    if(game_param){
+        json_object_update(msg, game_param);
+    }
+
+    return msg;
+}
+
+json_t* receive_json(const int socket_fd) {
+    /*
+    size_t len = 0;
+
+    // Ricezione della lunghezza
+    // MSG_WAITALL aspetta che tutto il messaggio sia ricevuto (blocca tutto) bisognerebbe mettere un timer nelle impostazioni del server 
+    if (recv(socket_fd, &len, sizeof(size_t), MSG_WAITALL) != sizeof(size_t)) {
+        return NULL;
+    }
+
+    // Alloca buffer per il JSON
+    char* json_str = malloc(len);
+    if (!json_str) return NULL;
+
+    // Ricezione del JSON completo
+    if (recv(socket_fd, json_str, len, MSG_WAITALL) != (ssize_t)len) {
+        free(json_str);
+        return NULL;
+    }
+
+    // Parsa il JSON
+    json_error_t error;
+    json_t* root = json_loads(json_str, 0, &error);
+    free(json_str);
+
+    return root;
+    */
+    
+
+    char buffer[1024];
+    ssize_t len = recv(socket_fd, buffer, sizeof(buffer)-1, 0);
+    if (len <= 0) return NULL;
+    
+    buffer[len] = '\0';
+    
+    json_error_t error;
+    json_t *root = json_loads(buffer, 0, &error);
+
+    if(!root)return NULL;
+
+    return root;
+}
