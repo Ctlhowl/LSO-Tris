@@ -16,7 +16,7 @@ void handle_create_game(server_t* server, const int client_sock, const char* use
     ssize_t game_id = create_game(server, username);
 
     if(game_id >= 0){
-        json_t* response = create_response("game_created", "Game created", create_json(server, game_id));
+        json_t* response = create_response("game_created", "Partita creata con successo", create_json(server, game_id));
         send_json_message(response, client_sock);
 
         // Notifica tutti i client della creazione di un nuovo gioco
@@ -87,16 +87,24 @@ void handle_accept_join(server_t* server, const int client_sock, const json_t* j
     }
 }
 
-//============ INTERFACCIA PUBBLICA ==================//
-void handle_route(server_t* server, const int client_sock, const char* username, const json_t* json_data){
-    json_t *json_method = json_object_get(json_data, "method");
-    
-    if(!json_is_string(json_method)){
-        send_error(client_sock, "405", "Invalid Method");
+void handle_list_games(server_t* server, const int client_sock, const char* username){
+    json_t* games = list_games(server,username);
+
+    if(games){
+        json_t* response = create_response("list_all_games", "List of all the games in the system", games);
+        send_json_message(response,client_sock);
+        printf("Lista delle partite inviate correttamente\n");
         return;
     }
 
+    send_error(client_sock, "507", "Internal server error");
+}
+
+//============ INTERFACCIA PUBBLICA ==================//
+void handle_route(server_t* server, const int client_sock, const char* username, const json_t* json_data){
+    json_t *json_method = json_object_get(json_data, "method");
     const char* method = json_string_value(json_method);
+    
     if(strcmp(method, "create_game") == 0){
         handle_create_game(server, client_sock, username);
         return;
@@ -118,7 +126,8 @@ void handle_route(server_t* server, const int client_sock, const char* username,
     }
 
     if (strcmp(method, "list_games") == 0){
-        
+        printf("Lista delle partite\n");
+        handle_list_games(server, client_sock, username);
         return;
     }
 
@@ -152,30 +161,13 @@ void handle_route(server_t* server, const int client_sock, const char* username,
  */
 bool handle_login(server_t* server, const int client_sock, const json_t* json_method, const json_t* json_user) {
     const char* method = json_string_value(json_method);
-    
-    if(!json_is_string(json_method) || !json_is_string(json_user)){
-        send_error(client_sock, "400", "Method or Username should be string");
-        return false;
-    }
 
     if (method && strcmp(method, "login") == 0) {
         const char* username = json_string_value(json_user);
-        
-        // Controllo sull'username
-        if (!username) {
-            send_error(client_sock, "400", "Username required");
-            return false;
-        }
-
-        size_t username_len = strlen(username);
-        if (username_len == 0 || username_len >= 64) {
-            send_error(client_sock, "400", "Username must be 1-63 characters");
-            return false;
-        }
 
         // Verifica unicità del nome
         if (!is_username_unique(server, username)) {
-            send_error(client_sock, "409", "Username already in use");
+            send_json_message(create_response("error", "Username già in uso, riprova", NULL), client_sock);
             return false;
         }
 

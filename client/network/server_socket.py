@@ -1,31 +1,72 @@
-import socket
+import json, struct, socket, threading
+
 
 class ServerSocket:
-    def __init__(self, server, port, disconnected_message):
+    def __init__(self, ip, port, disconnected_message):
         self.header = 64
         self.format = 'utf-8'
         self.disconnected_message = disconnected_message
 
         self.port = port
-        self.server = server
-        self.add = (server, port)
+        self.ip = ip
+        self.add = (ip, port)
+        self.server_sock = None
 
     def connect(self):
-        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client.connect(self.add)
+        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_sock.connect(self.add)
 
     def close(self):
         self.send_msg(self.disconnected_message)
-        self.client.close()
+        self.server_sock.close()
 
-    def send_msg(self, msg):
-        message = msg.encode(self.format)
-        msg_length = len(message)
+    def send_json_message(self, msg):
+        try:
+            json_str = json.dumps(msg, separators=(',', ':'))
+            encoded = json_str.encode('utf-8')
+            length = struct.pack('!I', len(encoded))  # 4-byte unsigned int in network byte order
+            self.server_sock.sendall(length)
+            self.server_sock.sendall(encoded)
+            return True
+        except Exception as e:
+            print(f"Send error: {e}")
+            return False
 
-        send_length = str(msg_length).encode(self.format)
-        send_length += b' ' * (self.header - len(send_length))
+    def recv_json_message(self):
+        try:
+            # Riceve 4 byte della lunghezza
+            raw_len = self.recv_all(4)
+            if not raw_len:
+                return None
+            length = struct.unpack('!I', raw_len)[0]
+            
+            # Riceve il messaggio JSON
+            raw_msg = self.recv_all(length)
+            if not raw_msg:
+                return None
+            
+            return json.loads(raw_msg.decode('utf-8'))
+        except Exception as e:
+            print(f"Receive error: {e}")
+            return None
 
-        self.client.send(send_length)
-        self.client.send(message)
+    def listen_to_server(self, last_message):
+        while True:
+            msg = self.recv_json_message()
+            if msg is None:
+                print("Connessione persa o messaggio vuoto")
+                break
+            
+            if msg.get("event"):
+                last_message["event"] = msg; 
 
-   
+            
+    def recv_all(self, n):
+        """ Riceve esattamente n byte dal socket """
+        data = bytearray()
+        while len(data) < n:
+            packet = self.server_sock.recv(n - len(data))
+            if not packet:
+                return None
+            data.extend(packet)
+        return data

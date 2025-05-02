@@ -316,3 +316,28 @@ json_t* create_json(server_t* server, size_t id){
     pthread_mutex_unlock(&server->games_mutex);
     return msg;
 }
+
+json_t* list_games(server_t* server, const char* username){
+    json_t* games = json_array();
+    pthread_mutex_lock(&server->games_mutex);
+
+    game_node_t* current = game_list->head;
+
+    while(current){
+        if(strcmp(current->game.player1,username) != 0){
+            pthread_mutex_unlock(&server->games_mutex);
+            json_t* game = create_json(server,current->game.id);
+            json_array_append_new(games,game);
+        }
+
+        current = current->next;
+    }
+
+    pthread_mutex_unlock(&server->games_mutex);
+
+    if(!games){
+        return NULL;
+    }
+
+    return games;
+}

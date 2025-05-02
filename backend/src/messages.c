@@ -16,18 +16,14 @@
  * Dopo ogni chiamata a send() la funzione verifica quanti byte sono stati effettivamente inviati.
  * Se non sono stati inviati tutti i byte, continua a inviare i dati rimanenti
 */
-bool send_all_bytes(const int sock, const void *buffer, const size_t length) {
+bool send_all_bytes(const int sock, const void *data, const size_t length) {
     size_t total_sent = 0;
-    const char *ptr = buffer;
-
+    const char* buffer = (const char*)data;
     while (total_sent < length) {
-        ssize_t sent = send(sock, ptr + total_sent, length - total_sent, 0);
-        if (sent <= 0) {
-            return false;
-        }
+        ssize_t sent = send(sock, buffer + total_sent, length - total_sent, 0);
+        if (sent <= 0) return false;
         total_sent += sent;
     }
-
     return true;
 }
 
@@ -144,8 +140,8 @@ bool send_json_message(json_t* json_data, const int sock) {
     if (!json_str) return false;
 
     //Calcolo della lunghezza (size_t in network byte order)
-    size_t json_len = strlen(json_str);
-    size_t net_len = htonl(json_len);  // Conversione a network byte order
+    uint32_t json_len = (uint32_t)strlen(json_str);
+    uint32_t net_len = htonl(json_len);
 
     //Invio lunghezza del messaggio
     if (!send_all_bytes(sock, &net_len, sizeof(net_len))) {
@@ -190,10 +186,10 @@ json_t* create_request(const char* request_type, const char* description, json_t
     }
 
     json_object_set_new(msg, "request", json_string(request_type));
-    json_object_set_new(msg, "message", json_string(description));
+    json_object_set_new(msg, "description", json_string(description));
     
     if(game_param){
-        json_object_update(msg, game_param);
+        json_objjson_object_set_new(msg, "data", game_param);
     }
     
     return msg;
@@ -210,10 +206,10 @@ json_t* create_response(const char* response_type, const char* description, json
     }
 
     json_object_set_new(msg, "response", json_string(response_type));
-    json_object_set_new(msg, "message", json_string(description));
+    json_object_set_new(msg, "description", json_string(description));
     
     if(game_param){
-        json_object_update(msg, game_param);
+        json_object_set_new(msg, "data", game_param);
     }
 
     return msg;
@@ -234,26 +230,28 @@ json_t* create_response(const char* response_type, const char* description, json
     json_object_set_new(msg, "game_id", json_integer(game_id));
 
     if(game_param){
-        json_object_update(msg, game_param);
+        json_objjson_object_set_new(msg, "data", game_param);
     }
 
     return msg;
 }
 
-
-
 json_t* receive_json(const int socket_fd) {
-    /*
-    size_t len = 0;
-
+    
     // Ricezione della lunghezza
     // MSG_WAITALL aspetta che tutto il messaggio sia ricevuto (blocca tutto) bisognerebbe mettere un timer nelle impostazioni del server 
-    if (recv(socket_fd, &len, sizeof(size_t), MSG_WAITALL) != sizeof(size_t)) {
+    uint32_t net_len;
+    if (recv(socket_fd, &net_len, sizeof(net_len), MSG_WAITALL) != sizeof(net_len)) {
         return NULL;
     }
 
-    // Alloca buffer per il JSON
-    char* json_str = malloc(len);
+    // Controllo lunghezza e allocazione buffer per il JSON
+    size_t len = ntohl(net_len);
+    if (len == 0 || len > MAX_JSON_SIZE) {
+        return NULL;
+    }
+
+    char* json_str = malloc(len + 1);  // +1 per sicurezza null-terminator
     if (!json_str) return NULL;
 
     // Ricezione del JSON completo
@@ -262,25 +260,12 @@ json_t* receive_json(const int socket_fd) {
         return NULL;
     }
 
-    // Parsa il JSON
+    json_str[len] = '\0';  // Sicurezza
+
+    // Parsing della stringa in JSON
     json_error_t error;
     json_t* root = json_loads(json_str, 0, &error);
     free(json_str);
-
-    return root;
-    */
-    
-
-    char buffer[1024];
-    ssize_t len = recv(socket_fd, buffer, sizeof(buffer)-1, 0);
-    if (len <= 0) return NULL;
-    
-    buffer[len] = '\0';
-    
-    json_error_t error;
-    json_t *root = json_loads(buffer, 0, &error);
-
-    if(!root) return NULL;
 
     return root;
 }

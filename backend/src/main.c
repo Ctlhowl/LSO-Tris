@@ -46,8 +46,7 @@ int main() {
             close(*client_sock);
             free(client_sock);
 
-            if (server.running) continue;
-            else break;
+            if (!server.running) break;
         }
 
         
@@ -84,10 +83,7 @@ void* accept_clients(void* arg) {
     // Gestione autenticazione
     while (true){
         json_t* response = receive_json(client_sock);
-        if (!response) {
-            perror("receive failed");
-            send_error(client_sock, "400", "Invalid Method");
-        }else{
+        if (response) {
             // Valuta risposta
             json_t *json_method = json_object_get(response, "method");
             json_t *json_user = json_object_get(response, "username");
@@ -99,15 +95,13 @@ void* accept_clients(void* arg) {
                     json_t* response = receive_json(client_sock);        
                     if (!response) {
                         client_remove(&server, client_sock);
-                        return NULL;
+                        return;
                     }
 
                     const char* username = json_string_value(json_user);
                     handle_route(&server, client_sock, username, response);
                 }
             }
-        }    
+        } 
     }
-
-    return NULL;
 }

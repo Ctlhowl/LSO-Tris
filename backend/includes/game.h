@@ -42,5 +42,6 @@ short accept_join_request(server_t* server, size_t game_id, const char *player2)
 game_t* find_game_by_id(size_t game_id);
 
 json_t* create_json(server_t* server, size_t id);
+json_t* list_games(server_t* server, const char* username);
 
 #endif
