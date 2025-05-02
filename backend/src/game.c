@@ -84,8 +84,7 @@ const char* game_state_to_string(game_state_t state) {
 bool is_opponent_available(const char* player2){
     game_node_t *curr = game_list->head;
     
-    size_t index = 0;
-    while(curr && index <= game_list->count){
+    while(curr){
         game_t game = curr->game;
         if (game.state == GAME_ONGOING){
             if(strcmp(game.player1, player2) == 0 || strcmp(game.player2, player2) == 0){
@@ -93,6 +92,7 @@ bool is_opponent_available(const char* player2){
                 return false;
             }
         }
+        curr = curr->next;
     }
 
     return true;
@@ -175,8 +175,7 @@ short request_join_game(server_t* server, size_t game_id, const char *player2) {
     pthread_mutex_lock(&server->games_mutex);
     game_node_t *curr = game_list->head;
     
-    size_t index = 0;
-    while(curr && index <= curr->game.id){
+    while(curr){
         if(curr->game.id == game_id){
             // Verifica che la partita sia in stato di "attesa"
             if (curr->game.state != GAME_WAITING) {
@@ -215,13 +214,12 @@ short accept_join_request(server_t* server, size_t game_id, const char *player2)
     pthread_mutex_lock(&server->games_mutex);
     game_node_t *curr = game_list->head;
     
-    size_t index = 0;
-    while(curr && index <= curr->game.id){
-        game_t game = curr->game;
-        if(game.id == game_id){
+    while(curr){
+        game_t *game = &curr->game;
+        if(game->id == game_id){
             
             // Verifica che la partita sia in stato di "attesa"
-            if (game.state != GAME_WAITING) {
+            if (game->state != GAME_WAITING) {
                 pthread_mutex_unlock(&server->games_mutex);
                 return -2;  // La partita non è in attesa, non si può unire
             }
@@ -234,13 +232,10 @@ short accept_join_request(server_t* server, size_t game_id, const char *player2)
             }
 
             // Aggiungi il secondo giocatore alla partita
-            strncpy(game.player2, player2, sizeof(game.player2) - 1);
-            game.state = GAME_ONGOING;
+            strncpy(game->player2, player2, sizeof(game->player2) - 1);
+            game->state = GAME_ONGOING;
 
-            pthread_mutex_unlock(&server->games_mutex);
-
-            // Notifica a entrambi i giocatori che la partita è iniziata
-            //send_game_update(game_id);
+            pthread_mutex_unlock(&server->games_mutex);            
 
             return 0;  // Successo
         }
@@ -252,6 +247,19 @@ short accept_join_request(server_t* server, size_t game_id, const char *player2)
     return -1;  // Partita non trovata
 }
 
+game_t* find_game_by_id(size_t game_id){
+    game_node_t *curr = game_list->head;
+    
+    while(curr){
+        game_t* game = &curr->game;
+        if (game->id == game_id){
+            return game;
+        }
+        curr = curr->next;
+    }
+
+    return NULL;
+}
 
 /**
  * Serializza la struttura game_t
@@ -262,9 +270,8 @@ json_t* create_json(server_t* server, size_t id){
     
     pthread_mutex_lock(&server->games_mutex);
     
-    size_t index = 0;
     game_node_t* current = game_list->head;
-    while (current && index <= id) {
+    while (current) {
         if (current->game.id == id) {
             game_t game =  current->game;
 

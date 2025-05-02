@@ -20,7 +20,7 @@ void handle_create_game(server_t* server, const int client_sock, const char* use
         send_json_message(response, client_sock);
 
         // Notifica tutti i client della creazione di un nuovo gioco
-        send_broadcast(server, create_event("new_game_available", game_id, create_json(server, game_id)), client_sock);
+        send_broadcast(server, create_event("new_game_available", game_id, create_json(server, game_id)), client_sock, -1);
         return;
     }
 
@@ -58,14 +58,20 @@ void handle_accept_join(server_t* server, const int client_sock, const json_t* j
 
     // Il creatore accetta la richiesta di join
     short result = accept_join_request(server, game_id, opponent);
+    
     switch(result){
         case 0:
             // Risposta alla richiesta del client
             json_t* response = create_response("join_accepted", "", create_json(server, game_id));
             send_json_message(response, client_sock);
 
+            // Notifica a entrambi i giocatori che la partita è iniziata
+            send_game_update(server, find_game_by_id(game_id));
+
+            printf("riga 70\n");
+            int sock_client2 = find_client_by_username(server, opponent);
             // Notifica tutti i client che il game con id game_id non é piu disponibile
-            send_broadcast(server, create_event("game_not_available", game_id, create_json(server, game_id)), client_sock);
+            send_broadcast(server, create_event("game_not_available", game_id, create_json(server, game_id)), client_sock, sock_client2);
             break;
         case -1:
             send_error(client_sock, "400", "Game id not exists");
@@ -111,7 +117,7 @@ void handle_route(server_t* server, const int client_sock, const char* username,
         return;
     }
 
-    if (strcmp(method, "list_available_games") == 0){
+    if (strcmp(method, "list_games") == 0){
         
         return;
     }

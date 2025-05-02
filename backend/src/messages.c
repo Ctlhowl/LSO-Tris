@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 
 #include "client.h"
+#include "game.h"
 
 //============ METODI PRIVATI ==================//
 
@@ -33,10 +34,45 @@ bool send_all_bytes(const int sock, const void *buffer, const size_t length) {
 
 //============ INTERFACCIA PUBBLICA ==================//
 
+bool send_game_update(server_t* server, game_t* game){
+    printf("riga 38 game id: %ld\n",game->id);
+    json_t* response;
+    pthread_mutex_lock(&server->games_mutex);
+
+    if(game->state == GAME_ONGOING){
+       printf("riga 43\n") ;
+       response = create_response("game_update","the game is still going",create_json(server,game->id));
+    }
+
+    if(game->state == GAME_OVER){
+        if(game->winner[0] == '\0'){
+            response = create_response("game_over_draw","the game is finished with a draw",create_json(server,game->id));
+        }
+        else {
+            response = create_response("game_over","the game is finished with a winner",create_json(server,game->id));   
+        }
+    }
+
+    bool sendedToPlayer1 = send_json_message(response,find_client_by_username(server,game->player1));
+    printf("riga 57\n");
+    bool sendedToPlayer2 = send_json_message(response,find_client_by_username(server,game->player2));
+
+    if(sendedToPlayer1 && sendedToPlayer2){
+        pthread_mutex_unlock(&server->games_mutex);
+        printf("richiesta inviata correttamente\n");
+        return true;
+    }
+
+    pthread_mutex_unlock(&server->games_mutex);
+
+    perror("failed to send game updates");
+    return false;
+}
+
 /**
  * Invia un messaggio in broadcast a tutti i client connessi escluso uno
  */
-bool send_broadcast(server_t* server, json_t* json_data,  const int exclude_client) {
+bool send_broadcast(server_t* server, json_t* json_data, const int exclude_client1, const int exclude_client2) {
     if (!json_data) return false;
 
     pthread_mutex_lock(&server->clients_mutex);
@@ -46,14 +82,17 @@ bool send_broadcast(server_t* server, json_t* json_data,  const int exclude_clie
     while (current) {
         int sock = current->client.socket;
 
-        if (sock != exclude_client) {
+        bool exclude = (sock == exclude_client1) || 
+        (exclude_client2 != -1 && sock == exclude_client2);
+
+        if (!exclude) {
             if (!send_json_message(json_data, sock)) {
                 perror("broadcast send failed");
-
                 pthread_mutex_unlock(&server->clients_mutex);
                 return false;
             }
         }
+
         current = current->next;
     }
     
@@ -163,14 +202,14 @@ json_t* create_request(const char* request_type, const char* description, json_t
 /**
  * Crea una risposta standard in formato json specificando il tipo di risposta e una descrizione
  */
-json_t* create_response(const char* request_type, const char* description, json_t* game_param) {
+json_t* create_response(const char* response_type, const char* description, json_t* game_param) {
     json_t* msg = json_object();
     if (!msg){
         perror("json creation failed");
         return NULL;
     }
 
-    json_object_set_new(msg, "response", json_string(request_type));
+    json_object_set_new(msg, "response", json_string(response_type));
     json_object_set_new(msg, "message", json_string(description));
     
     if(game_param){

@@ -5,7 +5,10 @@
 #include <stdbool.h>
 #include <server.h>
 
-bool send_broadcast(server_t* server, json_t* json_data, const int exclude_client);
+#include "game.h"
+
+bool send_game_update(server_t* server, game_t* game);
+bool send_broadcast(server_t* server, json_t* json_data, const int exclude_client1, const int exclude_client2);
 bool send_to_player(server_t* server, json_t* json_data, const char* player);
 bool send_json_message(json_t* json_data, int client_sock);
 bool send_error(const int client_sock, const char* code_error, const char* description);
