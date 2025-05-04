@@ -37,23 +37,19 @@ void handle_join_request(server_t* server, const int client_sock, const char* us
         switch(result){
             case 0:
                 // Risposta alla richiesta del client
-                json_t* response = create_response("join_requested", "Request successfully sended", create_json(server, game_id));
-                send_json_message(response, client_sock);
+                send_json_message(create_response("join_requested", "Richiesta inviata correttamente", create_json(server, game_id)), client_sock);
                 return;
             case -1:
-                error = create_response("error","La partita non esiste",NULL);
-                send_json_message(error, client_sock);
+                send_json_message(create_response("error", "Id partita inesistente", NULL), client_sock);
                 break;
             case -2:
-                error = create_response("error","Partita non disponibile",NULL);
-                send_json_message(error, client_sock);
+                send_json_message(create_response("error", "La parita non esiste più", NULL), client_sock);
                 break;
             default:
         }
     }
 
-    error = create_response("error","Errore interno al server",NULL);
-    send_json_message(error, client_sock);
+    send_json_message(create_response("error", "Errore Server", NULL), client_sock);
 }
 
 void handle_accept_join(server_t* server, const int client_sock, const json_t* json_data){

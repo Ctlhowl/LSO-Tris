@@ -54,6 +54,7 @@ bool send_game_update(server_t* server, game_t* game){
     bool sendedToPlayer2 = send_json_message(response,find_client_by_username(server,game->player2));
 
     if(sendedToPlayer1 && sendedToPlayer2){
+        pthread_mutex_unlock(&server->games_mutex);
         return true;
     }
 
