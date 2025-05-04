@@ -98,6 +98,46 @@ bool is_opponent_available(const char* player2){
     return true;
 }
 
+short check_win(game_t* game){
+    // Controlla righe, colonne e diagonali per una vittoria
+    for (int i = 0; i < 3; i++) {
+        // Controllo righe
+        if (game->board[i][0] != '\0' && game->board[i][0] == game->board[i][1] && game->board[i][1] == game->board[i][2]) {
+            return 1;  // Vincitore
+        }
+        // Controllo colonne
+        if (game->board[0][i] != '\0' && game->board[0][i] == game->board[1][i] && game->board[1][i] == game->board[2][i]) {
+            return 1;  // Vincitore
+        }
+    }
+
+    // Controllo diagonali
+    if (game->board[0][0] != '\0' && game->board[0][0] == game->board[1][1] && game->board[1][1] == game->board[2][2]) {
+        return 1;  // Vincitore
+    }
+    if (game->board[0][2] != '\0' && game->board[0][2] == game->board[1][1] && game->board[1][1] == game->board[2][0]) {
+        return 1;  // Vincitore
+    }
+
+    // Controlla pareggio
+    bool filled = true;
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            if (game->board[i][j] == '\0') {
+                filled = false;
+                break;
+            }
+        }
+    }
+
+    if (filled) {
+        game->state = GAME_OVER;
+        return 0;  // Pareggio
+    }
+
+    return -1;  // Continua a giocare
+}
+
 //============ INTERFACCIA PUBBLICA ==================//
 /**
  * Inizializza le strutture utili per gestire le partite esistenti
@@ -191,10 +231,10 @@ short request_join_game(server_t* server, size_t game_id, const char *player2) {
             json_t *join_request_msg = create_request("join_request", "", game_param);
 
              // Invia il messaggio al creatore (player1)
-             send_to_player(server, join_request_msg, curr->game.player1);
+            send_to_player(server, join_request_msg, curr->game.player1);
 
-             pthread_mutex_unlock(&server->games_mutex);
-             return 0;  // Successo
+            pthread_mutex_unlock(&server->games_mutex);
+            return 0;  // Successo
         }
 
         curr = curr->next;
@@ -247,17 +287,73 @@ short accept_join_request(server_t* server, size_t game_id, const char *player2)
     return -1;  // Partita non trovata
 }
 
-game_t* find_game_by_id(size_t game_id){
+json_t* reject_join_request(size_t game_id, const char* player2){
+    json_t* response = json_object();
+    if (game_id >= game_list->count) {
+        return NULL;  // Gioco non valido
+    }
+
+    json_object_set_new(response,"id",json_integer(game_id));
+    json_object_set_new(response,"rejected_player",json_string(player2));
+
+    return response;
+}
+
+short make_move(server_t* server, game_t* game, const char *username, int x, int y) {
+
+    pthread_mutex_lock(&server->games_mutex);
+    
+    if(game->state != GAME_ONGOING){
+        pthread_mutex_unlock(&server->games_mutex);
+        return -1; //La partita non è in gioco
+    }
+
+    // Verifica che sia il turno del giocatore
+    if (strcmp(game->turn, username) != 0) {
+        pthread_mutex_unlock(&server->games_mutex);
+        return -2;  // Non è il turno del giocatore che ha inviato la richiesta
+    }
+
+    // Esegui la mossa
+    char symbol = (strcmp(game->turn, game->player1) == 0) ? 'X' : 'O';
+    game->board[x][y] = symbol;
+
+    // Controlla se c'è un vincitore
+    short result = check_win(game);
+    
+    if (result == 1) {
+        game->state = GAME_OVER;
+        strncpy(game->winner, username, 63);// Imposta il vincitore
+        pthread_mutex_unlock(&server->games_mutex);
+        return 0;  // Vincitore trovato
+    }
+
+    if (result == 0){
+        game->state = GAME_OVER;
+        pthread_mutex_unlock(&server->games_mutex);
+        return 0;  // Partita terminata in pareggio
+    }
+
+    // Cambia il turno
+    strncpy(game->turn, (strcmp(game->turn, game->player1) == 0) ? game->player2 : game->player1, 63);
+    pthread_mutex_unlock(&server->games_mutex);
+    return 0;  // Mossa successiva, gioco continua
+}
+
+game_t* find_game_by_id(server_t* server,size_t game_id){
+    pthread_mutex_lock(&server->games_mutex);
     game_node_t *curr = game_list->head;
     
     while(curr){
         game_t* game = &curr->game;
         if (game->id == game_id){
+            pthread_mutex_unlock(&server->games_mutex);
             return game;
         }
         curr = curr->next;
     }
 
+    pthread_mutex_unlock(&server->games_mutex);
     return NULL;
 }
 
@@ -273,7 +369,7 @@ json_t* create_json(server_t* server, size_t id){
     game_node_t* current = game_list->head;
     while (current) {
         if (current->game.id == id) {
-            game_t game =  current->game;
+            game_t game = current->game;
 
             json_object_set_new(msg, "id", json_integer(game.id));
             json_object_set_new(msg, "player1", json_string(game.player1));

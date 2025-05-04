@@ -95,7 +95,7 @@ void* accept_clients(void* arg) {
                     json_t* response = receive_json(client_sock);        
                     if (!response) {
                         client_remove(&server, client_sock);
-                        return;
+                        return NULL;
                     }
 
                     const char* username = json_string_value(json_user);

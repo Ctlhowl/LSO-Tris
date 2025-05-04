@@ -31,35 +31,31 @@ bool send_all_bytes(const int sock, const void *data, const size_t length) {
 //============ INTERFACCIA PUBBLICA ==================//
 
 bool send_game_update(server_t* server, game_t* game){
-    printf("riga 38 game id: %ld\n",game->id);
     json_t* response;
     pthread_mutex_lock(&server->games_mutex);
 
     if(game->state == GAME_ONGOING){
-       printf("riga 43\n") ;
+       pthread_mutex_unlock(&server->games_mutex);
        response = create_response("game_update","the game is still going",create_json(server,game->id));
     }
 
     if(game->state == GAME_OVER){
         if(game->winner[0] == '\0'){
+            pthread_mutex_unlock(&server->games_mutex);
             response = create_response("game_over_draw","the game is finished with a draw",create_json(server,game->id));
         }
         else {
+            pthread_mutex_unlock(&server->games_mutex);
             response = create_response("game_over","the game is finished with a winner",create_json(server,game->id));   
         }
     }
 
     bool sendedToPlayer1 = send_json_message(response,find_client_by_username(server,game->player1));
-    printf("riga 57\n");
     bool sendedToPlayer2 = send_json_message(response,find_client_by_username(server,game->player2));
 
     if(sendedToPlayer1 && sendedToPlayer2){
-        pthread_mutex_unlock(&server->games_mutex);
-        printf("richiesta inviata correttamente\n");
         return true;
     }
-
-    pthread_mutex_unlock(&server->games_mutex);
 
     perror("failed to send game updates");
     return false;
@@ -189,7 +185,7 @@ json_t* create_request(const char* request_type, const char* description, json_t
     json_object_set_new(msg, "description", json_string(description));
     
     if(game_param){
-        json_objjson_object_set_new(msg, "data", game_param);
+        json_object_set_new(msg, "data", game_param);
     }
     
     return msg;
@@ -230,14 +226,14 @@ json_t* create_response(const char* response_type, const char* description, json
     json_object_set_new(msg, "game_id", json_integer(game_id));
 
     if(game_param){
-        json_objjson_object_set_new(msg, "data", game_param);
+        json_object_set_new(msg, "data", game_param);
     }
 
     return msg;
 }
 
 json_t* receive_json(const int socket_fd) {
-    
+    /*
     // Ricezione della lunghezza
     // MSG_WAITALL aspetta che tutto il messaggio sia ricevuto (blocca tutto) bisognerebbe mettere un timer nelle impostazioni del server 
     uint32_t net_len;
@@ -266,6 +262,19 @@ json_t* receive_json(const int socket_fd) {
     json_error_t error;
     json_t* root = json_loads(json_str, 0, &error);
     free(json_str);
+
+    return root;*/
+
+    char buffer[1024];
+    ssize_t len = recv(socket_fd, buffer, sizeof(buffer)-1, 0);
+    if (len <= 0) return NULL;
+    
+    buffer[len] = '\0';
+    
+    json_error_t error;
+    json_t *root = json_loads(buffer, 0, &error);
+
+    if(!root) return NULL;
 
     return root;
 }

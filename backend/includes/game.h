@@ -39,7 +39,9 @@ void game_cleanup(server_t* server);
 ssize_t create_game(server_t* server, const char* player1);
 short request_join_game(server_t* server, size_t game_id, const char *player2);
 short accept_join_request(server_t* server, size_t game_id, const char *player2);
-game_t* find_game_by_id(size_t game_id);
+json_t* reject_join_request(size_t game_id, const char* player2);
+short make_move(server_t* server, game_t* game, const char *username, int x, int y);
+game_t* find_game_by_id(server_t* server,size_t game_id);
 
 json_t* create_json(server_t* server, size_t id);
 json_t* list_games(server_t* server, const char* username);
