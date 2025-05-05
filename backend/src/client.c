@@ -117,9 +117,9 @@ bool client_remove(server_t* server, const ssize_t socket) {
 
 /**
  * Cerca la in numero di socket del client in base all'username (univoco) del player. 
- * Ritorna il numero del fd della socket a cui è connesso il client se il player esiste, -1 altrimenti 
+ * Ritorna il numero della socket a cui è connesso il client se il player esiste, -1 altrimenti 
  */
-int find_client_by_username(server_t* server, const char* username) {
+ssize_t find_client_by_username(server_t* server, const char* username) {
     if (!username) return -1;
 
     pthread_mutex_lock(&server->clients_mutex);
@@ -139,6 +139,29 @@ int find_client_by_username(server_t* server, const char* username) {
     return -1;
 }
 
+/**
+ * Cerca l'username (univoco) del player in base al numero di socket. 
+ * Ritorna il numero l'username del player se esiste, NULL altrimenti 
+ */
+const char* find_username_by_client(server_t* server, const ssize_t sock) {
+    if (sock == -1) return NULL;
+
+    pthread_mutex_lock(&server->clients_mutex);
+    
+    client_node_t* current = connected_clients->head;
+    while (current) {
+        if (current->client.socket == sock) {
+            const char* username = current->client.username;
+
+            pthread_mutex_unlock(&server->clients_mutex);
+            return username;
+        }
+        current = current->next;
+    }
+    
+    pthread_mutex_unlock(&server->clients_mutex);
+    return NULL;
+}
 
 /**
  * Verifica se l'username è univoco. 

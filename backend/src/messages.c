@@ -30,34 +30,46 @@ bool send_all_bytes(const int sock, const void *data, const size_t length) {
 
 //============ INTERFACCIA PUBBLICA ==================//
 
-bool send_game_update(server_t* server, game_t* game){
-    json_t* response;
+
+bool send_game_update(server_t* server, game_t* game, const char* username){
+    json_t* response = json_object();
+    json_t* request = json_object();
+
+    json_t* game_param = create_json(server, game->id);
+
     pthread_mutex_lock(&server->games_mutex);
 
     if(game->state == GAME_ONGOING){
-       pthread_mutex_unlock(&server->games_mutex);
-       response = create_response("game_update","the game is still going",create_json(server,game->id));
+       response = create_response("game_move", true, "La partita è ancora in corso", game_param);
+       request = create_request("game_update", "La partita è ancora in corso", game_param);
+    } else if(game->state == GAME_OVER && game->winner[0] == '\0'){
+        response = create_response("game_move", true, "Partita finita con pareggio", game_param);
+        request = create_request("game_update", "Partita finita con pareggio", game_param);
+    } else if (game->state == GAME_OVER){
+        response = create_response("game_move", true, "Partita finita con vincitore", game_param);   
+        request = create_request("game_update", "Partita finita con vincitore", game_param);
     }
 
-    if(game->state == GAME_OVER){
-        if(game->winner[0] == '\0'){
-            pthread_mutex_unlock(&server->games_mutex);
-            response = create_response("game_over_draw","the game is finished with a draw",create_json(server,game->id));
-        }
-        else {
-            pthread_mutex_unlock(&server->games_mutex);
-            response = create_response("game_over","the game is finished with a winner",create_json(server,game->id));   
-        }
+    bool sendedToPlayer1 = false;
+    bool sendedToPlayer2 = false;
+
+    ssize_t sock_client1 = find_client_by_username(server,game->player1);
+    ssize_t sock_client2 = find_client_by_username(server,game->player2);
+
+    if(strcmp(game->player1, username) == 0){
+        sendedToPlayer1 = send_json_message(response, sock_client1);
+        sendedToPlayer2 = send_json_message(request, sock_client2);
+    }else{
+        sendedToPlayer1 = send_json_message(request, sock_client1);
+        sendedToPlayer2 = send_json_message(response, sock_client2);
     }
-
-    bool sendedToPlayer1 = send_json_message(response,find_client_by_username(server,game->player1));
-    bool sendedToPlayer2 = send_json_message(response,find_client_by_username(server,game->player2));
-
+    
     if(sendedToPlayer1 && sendedToPlayer2){
         pthread_mutex_unlock(&server->games_mutex);
         return true;
     }
 
+    pthread_mutex_unlock(&server->games_mutex);
     perror("failed to send game updates");
     return false;
 }
@@ -110,6 +122,7 @@ bool send_to_player(server_t* server, json_t* json_data, const char* username) {
                 perror("send_to_player failed");
 
                 pthread_mutex_unlock(&server->clients_mutex);
+                free(json_data);
                 return false;
             }
 
@@ -152,26 +165,6 @@ bool send_json_message(json_t* json_data, const int sock) {
     return result;
 }
 
-bool send_error(const int client_sock, const char* code_error, const char* description){
-    json_t* msg = json_object();
-    if (!msg){
-        perror("json creation failed");
-        return NULL;
-    }
-
-    json_object_set_new(msg, "error:", json_string(code_error));
-    json_object_set_new(msg, "description", json_string(description));    
-    
-    if (!send_json_message(msg, client_sock)) {
-        perror("send error failed");
-        
-        return false;
-    } 
-    
-    free(msg);
-    return true;
-}
-
 /**
  * Crea una richiesta standard in formato json specificando il tipo di richiesta e una descrizione
  */
@@ -182,6 +175,7 @@ json_t* create_request(const char* request_type, const char* description, json_t
         return NULL;
     }
 
+    json_object_set_new(msg, "type", json_string("request"));
     json_object_set_new(msg, "request", json_string(request_type));
     json_object_set_new(msg, "description", json_string(description));
     
@@ -195,18 +189,22 @@ json_t* create_request(const char* request_type, const char* description, json_t
 /**
  * Crea una risposta standard in formato json specificando il tipo di risposta e una descrizione
  */
-json_t* create_response(const char* response_type, const char* description, json_t* game_param) {
+json_t* create_response(const char* response_type, bool status, const char* description, json_t* data) {
     json_t* msg = json_object();
     if (!msg){
         perror("json creation failed");
         return NULL;
     }
 
+    json_object_set_new(msg, "type", json_string("response"));
     json_object_set_new(msg, "response", json_string(response_type));
+
+    status ? json_object_set_new(msg, "status", json_string("ok")) : json_object_set_new(msg, "status", json_string("error")); 
+    
     json_object_set_new(msg, "description", json_string(description));
     
-    if(game_param){
-        json_object_set_new(msg, "data", game_param);
+    if(data){
+        json_object_set_new(msg, "data", data);
     }
 
     return msg;
@@ -216,16 +214,15 @@ json_t* create_response(const char* response_type, const char* description, json
 /**
  * Crea un messaggio evento 
  */
- json_t* create_event(const char* event_type, size_t game_id, json_t* game_param) {
+ json_t* create_broadcast(const char* event_type, json_t* game_param) {
     json_t* msg = json_object();
     if (!msg){
         perror("json creation failed");
         return NULL;
     }
 
+    json_object_set_new(msg, "type", json_string("broadcast"));
     json_object_set_new(msg, "event", json_string(event_type));
-    json_object_set_new(msg, "game_id", json_integer(game_id));
-
     if(game_param){
         json_object_set_new(msg, "data", game_param);
     }
@@ -234,38 +231,33 @@ json_t* create_response(const char* response_type, const char* description, json
 }
 
 json_t* receive_json(const int socket_fd) {
-    /*
-    // Ricezione della lunghezza
-    // MSG_WAITALL aspetta che tutto il messaggio sia ricevuto (blocca tutto) bisognerebbe mettere un timer nelle impostazioni del server 
     uint32_t net_len;
     if (recv(socket_fd, &net_len, sizeof(net_len), MSG_WAITALL) != sizeof(net_len)) {
         return NULL;
     }
 
-    // Controllo lunghezza e allocazione buffer per il JSON
     size_t len = ntohl(net_len);
     if (len == 0 || len > MAX_JSON_SIZE) {
         return NULL;
     }
 
-    char* json_str = malloc(len + 1);  // +1 per sicurezza null-terminator
+    char* json_str = malloc(len + 1);
     if (!json_str) return NULL;
 
-    // Ricezione del JSON completo
     if (recv(socket_fd, json_str, len, MSG_WAITALL) != (ssize_t)len) {
         free(json_str);
         return NULL;
     }
 
-    json_str[len] = '\0';  // Sicurezza
+    json_str[len] = '\0';
 
-    // Parsing della stringa in JSON
     json_error_t error;
     json_t* root = json_loads(json_str, 0, &error);
     free(json_str);
 
-    return root;*/
+    return root;
 
+    /*
     char buffer[1024];
     ssize_t len = recv(socket_fd, buffer, sizeof(buffer)-1, 0);
     if (len <= 0) return NULL;
@@ -278,4 +270,5 @@ json_t* receive_json(const int socket_fd) {
     if(!root) return NULL;
 
     return root;
+    */
 }

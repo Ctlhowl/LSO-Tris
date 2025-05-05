@@ -27,7 +27,10 @@ void client_cleanup(server_t* server);
 
 bool client_add(server_t* server, const client_t* client);
 bool client_remove(server_t* server, const ssize_t sock);
-int find_client_by_username(server_t* server, const char* username);
+
+ssize_t find_client_by_username(server_t* server, const char* username);
+const char* find_username_by_client(server_t* server, const ssize_t sock);
+
 bool is_username_unique(server_t* server, const char* username);
 
 #endif

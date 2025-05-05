@@ -228,10 +228,8 @@ short request_join_game(server_t* server, size_t game_id, const char *player2) {
             json_object_set_new(game_param, "game_id", json_integer(game_id));
             json_object_set_new(game_param, "player2", json_string(player2));
 
-            json_t *join_request_msg = create_request("join_request", "", game_param);
-
              // Invia il messaggio al creatore (player1)
-            send_to_player(server, join_request_msg, curr->game.player1);
+            send_to_player(server, create_request("join_request", "Nuova richiesta di join", game_param), curr->game.player1);
 
             pthread_mutex_unlock(&server->games_mutex);
             return 0;  // Successo
@@ -277,6 +275,12 @@ short accept_join_request(server_t* server, size_t game_id, const char *player2)
 
             pthread_mutex_unlock(&server->games_mutex);            
 
+            json_t* game_param = create_json(server, game->id);
+            
+             // Notifica l'avversario che la partita sta stata accettata con successo e può essere avviata
+            send_to_player(server, create_request("accept_join", "Richiesta accettata", NULL), curr->game.player2);
+            send_to_player(server, create_request("game_started", "La partita sta per cominciare", game_param), curr->game.player2);
+
             return 0;  // Successo
         }
 
@@ -293,7 +297,7 @@ json_t* reject_join_request(size_t game_id, const char* player2){
         return NULL;  // Gioco non valido
     }
 
-    json_object_set_new(response,"id",json_integer(game_id));
+    json_object_set_new(response,"game_id",json_integer(game_id));
     json_object_set_new(response,"rejected_player",json_string(player2));
 
     return response;
@@ -315,6 +319,11 @@ short make_move(server_t* server, game_t* game, const char *username, int x, int
     }
 
     // Esegui la mossa
+    if(game->board[x][y] != '\0'){
+        pthread_mutex_unlock(&server->games_mutex);
+        return -3;
+    }
+
     char symbol = (strcmp(game->turn, game->player1) == 0) ? 'X' : 'O';
     game->board[x][y] = symbol;
 
@@ -371,7 +380,7 @@ json_t* create_json(server_t* server, size_t id){
         if (current->game.id == id) {
             game_t game = current->game;
 
-            json_object_set_new(msg, "id", json_integer(game.id));
+            json_object_set_new(msg, "game_id", json_integer(game.id));
             json_object_set_new(msg, "player1", json_string(game.player1));
 
             strlen(game.player2) > 0 ? 
@@ -402,7 +411,7 @@ json_t* create_json(server_t* server, size_t id){
             json_object_set_new(msg, "state", json_string(game_state_to_string(game.state)));
 
             strlen(game.winner) > 0 ? 
-                json_object_set_new(msg, "winner", json_string(game.player2)) : 
+                json_object_set_new(msg, "winner", json_string(game.winner)) : 
                 json_object_set_new(msg, "winner", json_null());
         }
         

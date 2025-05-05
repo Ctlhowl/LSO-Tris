@@ -67,18 +67,24 @@ class MenuState:
 
     def send_create_game_request(self):
         try:    
-            self.server.send_json_message({
-                    "method": "create_game"
-                })
-            recv_msg = self.server.recv_json_message()
-            
-            if recv_msg.get('response') == "game_created":
+            recv_msg = self.server.send_request_and_wait({
+                "type": "request",
+                "request": "create_game",
+            }, "create_game")
+
+            if recv_msg is None:
+                self.error_msg = "Nessuna risposta dal server"
+                return
+                
+            print(recv_msg)
+            if recv_msg.get('status') == "ok":
                 self.info_msg = recv_msg.get('description')
                 self.error_msg = ''
-
-            elif recv_msg.get('response') == "error":
+            elif recv_msg.get('status') == "error":
                 self.info_msg = ''
                 self.error_msg = recv_msg.get('description')
                 
-        except (ConnectionError) as e:
-            print(f"Errore di connessione: {str(e)}")
+        except ConnectionError as e:
+            self.error_msg = f"Errore di connessione: {str(e)}"
+        except Exception as e:
+            self.error_msg = f"Errore sconosciuto: {str(e)}"

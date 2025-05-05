@@ -63,19 +63,28 @@ class LoginState:
     def send_auth_request(self):
         try:
             if self.current_player == '':
-                    self.current_player = "guest_" + str(uuid.uuid4().hex[:8])
+                self.current_player = "guest_" + str(uuid.uuid4().hex[:8])
 
-            self.server.send_json_message({
-                "method": "login", 
-                "username": self.current_player
-            })
-            recv_msg = self.server.recv_json_message()
-            
-            if recv_msg.get('response') == "login_success":
-                self.cleanup()
-                self.game_state_manager.set_state('menu')
-            elif recv_msg.get('response') == "error":
-                self.error_msg = recv_msg.get('description')
+            recv_msg = self.server.send_request_and_wait({
+                "type": "request",
+                "request": "login",
+                "data": {
+                    "username": self.current_player
+                }
+            }, "login")
+
+            if recv_msg is None:
+                self.error_msg = "Nessuna risposta dal server"
+                return
+        
+            if recv_msg:
+                if recv_msg.get('status') == "ok":
+                    self.cleanup()
+                    self.game_state_manager.set_state('menu')
+                elif recv_msg.get('status') == "error":
+                    self.error_msg = recv_msg.get('description')
                 
-        except (ConnectionError) as e:
-            print(f"Errore di connessione: {str(e)}")
+        except ConnectionError as e:
+            self.error_msg = f"Errore di connessione: {str(e)}"
+        except Exception as e:
+            self.error_msg = f"Errore sconosciuto: {str(e)}"

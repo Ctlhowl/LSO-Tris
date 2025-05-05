@@ -65,7 +65,8 @@ void* accept_clients(void* arg) {
     free(arg);
 
     printf("New connection on socket %d\n", client_sock);
-
+    
+    /*
     // Invio richiesta login
     json_t* request = create_request("login", "Please send your username", NULL);
     if (!request) {
@@ -103,5 +104,12 @@ void* accept_clients(void* arg) {
                 }
             }
         } 
+    }
+    */
+    while (true){
+        json_t* request = receive_json(client_sock);
+        if (request) {
+            handle_request(&server, client_sock, request);
+        }
     }
 }
