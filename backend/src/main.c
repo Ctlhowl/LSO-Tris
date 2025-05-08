@@ -10,6 +10,11 @@
 #include "messages.h"
 #include "routing.h"
 
+typedef struct {
+    int client_sock;
+    server_t* server;
+} thread_args_t;
+
 server_t server;
 
 void* accept_clients(void* arg);
@@ -24,7 +29,6 @@ int main() {
     game_init(&server);
 
     if(!server_start(&server)) {
-        fprintf(stderr, "Failed to start server\n");
         return 1;
     }
     
@@ -34,17 +38,22 @@ int main() {
 
         *client_sock = accept(server.socket_fd, (struct sockaddr*)&client_addr, &addr_len);
         if(*client_sock < 0) {
-            perror("accept failed");
+            printf("[Errore - main.main] accept fallita\n");
             free(client_sock);
             continue;
         }
 
         // Thread per accettare connessioni
+        thread_args_t* args = malloc(sizeof(thread_args_t));
+        args->client_sock = *client_sock;
+        args->server = &server;
+        free(client_sock);
+
         pthread_t accept_thread;
-        if(pthread_create(&accept_thread, NULL, accept_clients, client_sock) != 0) {
-            perror("pthread_create failed");
-            close(*client_sock);
-            free(client_sock);
+        if(pthread_create(&accept_thread, NULL, accept_clients, args) != 0) {
+            printf("[Errore - main.main] Errore nella creazione del thread\n");
+            close(args->client_sock);
+            free(args);
 
             if (!server.running) break;
         }
@@ -61,55 +70,33 @@ int main() {
 }
 
 void* accept_clients(void* arg) {
-    int client_sock = *(int*)arg;
-    free(arg);
+    thread_args_t* args = (thread_args_t*)arg;
 
-    printf("New connection on socket %d\n", client_sock);
-    
-    /*
-    // Invio richiesta login
-    json_t* request = create_request("login", "Please send your username", NULL);
-    if (!request) {
-        perror("create request failed");
-        close(client_sock);
-        return NULL;
-    }
+    int client_sock = args->client_sock;
+    server_t* server = args->server;
+    free(args);
 
-    if (!send_json_message(request, client_sock)) {
-        perror("send message failed");
-        close(client_sock);
-        return NULL;
-    }
-    
-    // Gestione autenticazione
-    while (true){
-        json_t* response = receive_json(client_sock);
-        if (response) {
-            // Valuta risposta
-            json_t *json_method = json_object_get(response, "method");
-            json_t *json_user = json_object_get(response, "username");
-            
-            if(handle_login(&server, client_sock, json_method, json_user)){
-                
-                // Gestione routing
-                while (true){
-                    json_t* response = receive_json(client_sock);        
-                    if (!response) {
-                        client_remove(&server, client_sock);
-                        return NULL;
-                    }
+    printf("[Info - main.accept_clinet] Client accettato: %d\n", client_sock);
 
-                    const char* username = json_string_value(json_user);
-                    handle_route(&server, client_sock, username, response);
-                }
-            }
-        } 
-    }
-    */
-    while (true){
+    bool running = true;
+    while (running){
         json_t* request = receive_json(client_sock);
-        if (request) {
-            handle_request(&server, client_sock, request);
+
+        if (!request) {
+            running = false;
+            break;
         }
+
+        const char* request_type = json_string_value(json_object_get(request, "request"));
+        if (request_type && strcmp(request_type, DISCONNECT_MESSAGE) == 0) {
+            running = false;
+            break;
+        }
+        
+        handle_request(server, client_sock, request);
     }
+
+    client_remove(server, client_sock);
+    printf("[Info - main.accept_client] Client disconnected: %d\n", client_sock);
+    return NULL;
 }

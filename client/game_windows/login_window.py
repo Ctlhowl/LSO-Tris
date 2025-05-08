@@ -33,6 +33,11 @@ class LoginState:
         self.render()
 
     def handle_event(self, event):
+        if event.type == pygame.QUIT:
+            self.cleanup()
+            self.game_state_manager.set_state('quit')
+            return
+        
         # Gestisce inserimento username
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_BACKSPACE:

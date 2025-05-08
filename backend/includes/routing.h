@@ -5,9 +5,9 @@
 #include <stdbool.h>
 #include <server.h>
 
-//void handle_route(server_t* server, const int client_sock, const char* username, const json_t* json_data);
-//bool handle_login(server_t* server, const int client_sock, const json_t* json_method, const json_t* json_user);
-
-void handle_request(server_t* server, const int client_sock, const json_t* request);
+/** 
+ * Gestisce le varie richieste inviate dal client 
+*/
+void handle_request(server_t* server, const int client_sock, const json_t* json_request);
 
 #endif

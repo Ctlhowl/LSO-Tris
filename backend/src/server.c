@@ -7,10 +7,10 @@
 
 //============ INTERFACCIA PUBBLICA ==================//
 /**
- * Inizializza le variabili della struttura server_t e i mutex
+ * Inizializza le variabili utili a gestire le informazioni del server
  */
 void server_init(server_t *server, const int port) {
-    // Inizializza la struttura del server
+    // Inizializza i campi della struttura
     server->socket_fd = -1;
     server->running = false;
     
@@ -28,59 +28,46 @@ void server_init(server_t *server, const int port) {
 /**
  * Crea una socket di tipo STREAM per il dominio TCP/IP, la imposta in modalità
  * SO_REUSEADDR in modo da consentire il riutilizzo degli indirizzi.
- * Per i socket AF_INET, questo significa che un socket può effettuare il binding,
- * tranne quando è presente un socket in ascolto attivo associato all'indirizzo.
- * Quando il socket in ascolto è associato a INADDR_ANY con una porta specifica,
- * non è possibile associare a questa porta alcun indirizzo locale.
  */
 bool server_start(server_t *server) {
     // Crea il socket
     server->socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server->socket_fd < 0) {
-        perror("socket creation failed");
+        printf("[Errore - server.server_start] Creazione della socket fallita\n");
         return false;
     }
     
     // Imposta opzioni del socket
     int opt = 1;
     if (setsockopt(server->socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
-        perror("setsockopt failed");
+        printf("[Errore - server.server_start] setsockopt fallita\n");
         close(server->socket_fd);
         return false;
     }
-
-    /*
-    struct timeval tv = {30, 0}; // 30 second timeout
-    if (setsockopt(server->socket_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv))) {
-        perror("setsockopt failed");
-        close(server->socket_fd);
-        return false;
-    }
-    */
 
     // Associa il socket all'indirizzo
     if (bind(server->socket_fd, (struct sockaddr*)&server->address, sizeof(server->address)) < 0) {
-        perror("bind failed");
+        printf("[Errore - server.server_start] bind fallita\n");
         close(server->socket_fd);
         return false;
     }
     
     // Mette il server in ascolto
     if (listen(server->socket_fd, MAX_CLIENTS) < 0) {
-        perror("listen failed");
+        printf("[Errore - server.server_start] listen fallita\n");
         close(server->socket_fd);
         return false;
     }
     
     server->running = true;
-    printf("Server listening on port %d...\n", ntohs(server->address.sin_port));
-
+    printf("[Info - server.server_start] Server in ascolto sulla porta %d...\n", ntohs(server->address.sin_port));
+    
     return true;
 }
 
 
 /**
- * Si occupa resettare i valori della struttura server_t e di deallocare i mutex
+ * Libera la memoria e imposta i campi della struttura ai valori di default prima di chiudere il server
  */
 void server_close(server_t *server) {
     pthread_mutex_destroy(&server->clients_mutex);
@@ -95,7 +82,7 @@ void server_close(server_t *server) {
             server->socket_fd = -1;
         }
         
-        printf("Server_t stopped\n");
+        printf("[Info - server.server_close] Server chiuso\n");
     }
 }
 

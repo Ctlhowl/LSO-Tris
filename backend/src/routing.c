@@ -11,59 +11,6 @@
 
 
 //============ METODI PRIVATI ==================//
-/*
-void handle_reject_join(const int client_sock, const json_t* json_data){
-    size_t game_id = json_integer_value(json_object_get(json_data, "game_id"));
-    const char* opponent = json_string_value(json_object_get(json_data, "player"));
-
-    json_t* result = reject_join_request(game_id,opponent);
-
-    if(result){
-        json_t* response = create_response("join_rejected", "Richiesta rifiutata con successo", result);
-        send_json_message(response, client_sock);
-    }
-
-    json_t* error = create_response("error","Impossibile rifiutare la richiesta",NULL);
-    send_json_message(error, client_sock);
-}
-
-void handle_game_move(server_t* server, const int client_sock, const char* username, const json_t* json_data){
-    json_t* error = json_object();
-    size_t game_id = json_integer_value(json_object_get(json_data, "game_id"));
-    short x = json_integer_value(json_object_get(json_data, "x"));
-    short y = json_integer_value(json_object_get(json_data, "y"));
-
-    game_t* game = find_game_by_id(server,game_id);
-
-    if(!game){
-        json_t* error = create_response("error","Partita non trovata",NULL);
-        send_json_message(error, client_sock);
-        return;
-    }
-
-    short result = make_move(server, game, username, x, y);
-
-    switch(result){
-        case 0 :
-            send_game_update(server,game);
-            break;
-        case -1:
-            error = create_response("error","La partita non è in gioco",NULL);
-            send_json_message(error,client_sock);
-            break;
-        case -2:
-            error = create_response("error","Attendi che sia il tuo turno per effettuare la mossa",NULL);
-            send_json_message(error,client_sock);
-            break;
-        default:
-            error = create_response("error","Errore interno al server",NULL);
-            send_json_message(error, client_sock);
-            return;
-    }
-
-}
-*/
-
 /**
  * Gestione richiesta login. Il metodo verifica che l'username sia univoco rispetto alla lista dei giocatori presenti nel server.
  * Se il nome è univoco allora il metodo invia la risposta la client di login con successo, altrimenti lo notifica dell'errore
@@ -83,8 +30,13 @@ void handle_login(server_t* server, const int client_sock, const json_t* data) {
         send_json_message(create_response("login", false, "Errore Server", NULL), client_sock);
         return;
     }
-
+    
+    
+    memset(new_client, 0, sizeof(client_t));
     new_client->socket = client_sock;
+    new_client->username[0] = '\0';  
+    
+
     strncpy(new_client->username, username, strlen(username));
 
     // Aggiunge il client alla lista di client connessi
@@ -108,7 +60,7 @@ void handle_create_game(server_t* server, const int client_sock){
         send_json_message(create_response("create_game", true, "Partita creata con successo", NULL), client_sock);
 
         // Notifica tutti i client della creazione di un nuovo gioco
-        send_broadcast(server, create_broadcast("new_game_available", create_json(server, game_id)), client_sock, -1);
+        send_broadcast(server, "new_game_available", create_json(server, game_id), client_sock, -1);
         return;
     }
 
@@ -163,7 +115,7 @@ void handle_join_request(server_t* server, const int client_sock, const json_t* 
 }
 
 /**
- * Gestione mossa
+ * Gestisce se la mossa effettuata è valida rispetto al turno e la cella.
  */
 void handle_game_move(server_t* server, const int client_sock, const json_t* data){
 
@@ -203,7 +155,6 @@ void handle_game_move(server_t* server, const int client_sock, const json_t* dat
 
 /**
  * Gestione caso in cui il creatore della partita accetta la richiesta di join da parte di client_sock.
- * 
  */
 void handle_accept_join(server_t* server, const int client_sock, const json_t* data){
     size_t game_id = json_integer_value(json_object_get(data, "game_id"));
@@ -221,7 +172,7 @@ void handle_accept_join(server_t* server, const int client_sock, const json_t* d
 
             // Notifica tutti i client che il game con id game_id non é piu disponibile
             ssize_t sock_client2 = find_client_by_username(server, opponent);
-            send_broadcast(server, create_broadcast("game_not_available", create_json(server, game_id)), client_sock, sock_client2);
+            send_broadcast(server, "game_not_available", create_json(server, game_id), client_sock, sock_client2);
             break;
         case -1:
             send_json_message(create_response("accept_join", false, "La partita non esiste", NULL), client_sock);
@@ -230,7 +181,7 @@ void handle_accept_join(server_t* server, const int client_sock, const json_t* d
             send_json_message(create_response("accept_join", false, "Partita non disponibile", NULL), client_sock);
             break;
         case -4:
-            send_json_message(create_response("accept_join", false ,"Avversario impegnato in un altra partita", NULL), client_sock);
+            send_json_message(create_response("accept_join", false ,"Avversario impegnato in un'altra partita", NULL), client_sock);
             break;
         default:
             send_json_message(create_response("accept_join", false ,"Errore interno al server", NULL), client_sock);
@@ -238,7 +189,78 @@ void handle_accept_join(server_t* server, const int client_sock, const json_t* d
     }
 }
 
+/**
+ * Gestisce il caso in cui un giocatore abbandona la parita o si arrende.
+ */
+void handle_quit(server_t* server, const int client_sock, const json_t* data){
+    size_t game_id = json_integer_value(json_object_get(data, "game_id"));
+    game_t* game = find_game_by_id(server,game_id);
+
+    if(!game){
+        send_json_message(create_response("game_quit", false, "La partita non esiste", NULL), client_sock);
+        return;
+    }
+
+    const char* username = find_username_by_client(server, client_sock);
+    short result = quit(server,game,username);
+
+    switch(result){
+        case 0:
+            json_t* game_param = create_json(server, game->id);
+            send_json_message(create_response("game_quit", true, "Partita abbandonata con successo", game_param), client_sock);
+
+            ssize_t owner = find_client_by_username(server, game->player1);
+            send_broadcast(server, "game_ended", game_param, owner , -1);
+            break;
+        case -1:
+            send_json_message(create_response("game_quit", false, "La partita non è in corso", NULL), client_sock);
+            break;
+        case -2:
+            send_json_message(create_response("game_quit", false, "Impossibile notificare l'avversario dell'abbandono", NULL), client_sock);
+            break;
+        default:
+            send_json_message(create_response("game_quit", false ,"Errore interno al server", NULL), client_sock);
+            return;
+    }
+}
+
+/**
+ * Gestisce il caso in cui uno, entrambi o nessun giocatore voglia fare il rematch
+ */
+void handle_rematch(server_t* server, const int client_sock, const char* username, const json_t* data){
+    size_t game_id = json_integer_value(json_object_get(data, "game_id"));
+    game_t* game = find_game_by_id(server,game_id);
+
+    if(!game){
+        send_json_message(create_response("game_rematch", false, "La partita non esiste", NULL), client_sock);
+        return;
+    }
+
+    short result = rematch(server, game, username);
+
+    switch (result){
+    case 0:
+        send_json_message(create_response("game_resetted", true, "Partita resettata ed in attesa", create_json(server,game->id)), client_sock);
+        send_broadcast(server, "new_game_available", create_json(server, game_id), client_sock, -1);
+        break;
+    case 1:
+        send_json_message(create_response("game_rematch", true, "Rivincita avvenuta con successo", NULL), client_sock);
+        break;
+    case 2:
+        send_json_message(create_response("waiting_opponent", true, "In attesa dell'avversario", NULL), client_sock);
+        break;
+    default:
+        break;
+    }
+
+}
+
+
 //============ INTERFACCIA PUBBLICA ==================//
+
+/** 
+ * Gestisce le varie richieste inviate dal client 
+*/
 void handle_request(server_t* server, const int client_sock, const json_t* json_request){
     const char* request = json_string_value(json_object_get(json_request, "request"));
     json_t* data = json_object_get(json_request, "data");
@@ -263,11 +285,6 @@ void handle_request(server_t* server, const int client_sock, const json_t* json_
         return;
     }
 
-    if (strcmp(request, "reject_join") == 0){
-
-        return;
-    }
-
     if (strcmp(request, "list_games") == 0){
         handle_list_games(server, client_sock);
         return;
@@ -278,8 +295,8 @@ void handle_request(server_t* server, const int client_sock, const json_t* json_
         return;
     }
 
-    if (strcmp(request, "quit") == 0){
-        
+    if (strcmp(request, "game_quit") == 0){
+        handle_quit(server, client_sock, data);
         return;
     }
 

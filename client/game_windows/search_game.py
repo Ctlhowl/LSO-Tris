@@ -14,7 +14,7 @@ class SearchGameState:
         self.info_msg = ''
         self.error_msg = ''
 
-        self.list_games = None
+        self.list_games = []
         self.selected_game = None
 
         # Imposta listener per i messaggi in broadcast
@@ -32,7 +32,6 @@ class SearchGameState:
     def cleanup(self):
         self.info_msg = ''
         self.error_msg = ''
-        self.list_games = None
         self.selected_game = None
 
     def run(self):
@@ -40,8 +39,12 @@ class SearchGameState:
         self.render()
 
     def handle_event(self, event):
+         if event.type == pygame.QUIT:
+            self.cleanup()
+            self.game_state_manager.set_state('quit')
+            return
+         
          if event.type == pygame.MOUSEBUTTONDOWN:
-
             # Ritorno al menu
             if self.components['button_menu'].is_clicked(event):
                 self.cleanup()
@@ -94,34 +97,30 @@ class SearchGameState:
             self.components['label_info'].draw(center=True)
 
 
+    
     def send_list_game_request(self):
         try:
-            if self.list_games == None:
+            if self.list_games == []:
                 recv_msg = self.server.send_request_and_wait({
                     "type": "request",
                     "request": "list_games",
                 }, "list_games")
 
-                
-                print(recv_msg)
-
                 if recv_msg.get('status') == "ok":
-                    data = recv_msg.get('data', [])
-                    if isinstance(data, str):
-                        try:
-                            self.list_games = json.loads(data)
-                        except json.JSONDecodeError:
-                            self.list_games = []
-                            self.error_msg = "Formato dati non valido"
-                    else:
-                        self.list_games = data
+                    data = recv_msg.get('data')
+                                        
+                    if isinstance(data, dict):  # Se è un singolo dizionario
+                        self.list_games.append(data)
+                    elif isinstance(data, list):  # Se è una lista di dizionari
+                        for game in data:
+                            if isinstance(game, dict):
+                                self.list_games.append(game)
 
                 elif recv_msg.get('status') == "error":
                     self.info_msg = ''
                     self.error_msg = recv_msg.get('description')
         except (ConnectionError) as e:
             print(f"Errore di connessione: {str(e)}")
-
 
     def send_join_request(self):
         try:    
@@ -147,42 +146,9 @@ class SearchGameState:
     def broadcast_handler(self, msg):
         print("Ricevuto broadcast:", msg)
         if msg.get('event') == "new_game_available":
-            data = msg.get("data")
-            
-            # Se i dati sono una stringa, convertili
-            if isinstance(data, str):
-                try:
-                    data = json.loads(data)
-                except json.JSONDecodeError:
-                    print("Errore nel parsing del broadcast")
-                    return
-            
-            # Inizializza se necessario e aggiungi i dati
-            if self.list_games is None:
-                self.list_games = []
-            
-            if isinstance(data, list):
-                self.list_games.extend(data)
-            elif isinstance(data, dict):
-                self.list_games.append(data)
+            self.list_games.append(msg.get("data"))
 
-        if msg.get('event') == "game_not_available":
-            data = msg.get("data")
-            
-            # Se i dati sono una stringa, convertili
-            if isinstance(data, str):
-                try:
-                    data = json.loads(data)
-                except json.JSONDecodeError:
-                    print("Errore nel parsing del broadcast")
-                    return
-            
-            # Inizializza se necessario e aggiungi i dati
-            if self.list_games is None:
-                self.list_games = []
-            
-            if isinstance(data, list):
-                self.list_games.remove(data)
-            elif isinstance(data, dict):
-                self.list_games.pop(data)
-        
+        if msg.get('event') == "game_not_available" or msg.get('event') == "game_ended":
+            game_id_to_remove = msg.get("data").get("game_id") 
+            self.list_games = list(filter(lambda game: game.get("game_id") != game_id_to_remove, self.list_games))
+            self.list_games.append(msg.get("data"))

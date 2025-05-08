@@ -24,7 +24,8 @@ class JoinRequestState:
             'label_title': Text(self.display, self.title, WIDTH // 2, 50),
             'label_info': Text(self.display, '',  WIDTH // 2, HEIGHT - 200, TEXT_SUCCESS_COLOR),
             'label_error': Text(self.display, '',  WIDTH // 2, HEIGHT - 200, TEXT_ERROR_COLOR),
-            'button_join': Button(self.display, "Accetta", (WIDTH //2 - 150), (HEIGHT - 150), 300, 50, TEXT_SUCCESS_COLOR, PRIMARY_COLOR, TEXT_COLOR, Text.get_font('large'))
+            'button_accept': Button(self.display, "Accetta", (WIDTH //2 - 350), (HEIGHT - 150), 300, 50, TEXT_SUCCESS_COLOR, PRIMARY_COLOR, TEXT_COLOR, Text.get_font('large')),
+            'button_reject': Button(self.display, "Rifiuta", (WIDTH //2 + 50), (HEIGHT - 150), 300, 50, TEXT_ERROR_COLOR, PRIMARY_COLOR, TEXT_COLOR, Text.get_font('large'))
         }
 
     def cleanup(self):
@@ -37,18 +38,26 @@ class JoinRequestState:
         self.render()
 
     def handle_event(self, event):
-         if event.type == pygame.MOUSEBUTTONDOWN:
-
+        if event.type == pygame.QUIT:
+            self.cleanup()
+            self.game_state_manager.set_state('quit')
+            return
+         
+        if event.type == pygame.MOUSEBUTTONDOWN:
             # Ritorno al menu
             if self.components['button_menu'].is_clicked(event):
                 self.cleanup()
                 self.game_state_manager.set_state('menu')
                 return
 
-            # Gestione click sul pulsante Join
-            if self.selected_game and self.components['button_join'].is_clicked(event):
+            # Gestione click sul pulsante Accetta
+            if self.selected_game and self.components['button_accept'].is_clicked(event):
                 self.send_accept_joint_request()
-                self.selected_game = None
+                return
+            
+            # Gestione click sul pulsante Rifiuta
+            if self.selected_game and self.components['button_reject'].is_clicked(event):
+                self.send_reject_joint_request()
                 return
 
              # Gestione selezione partita
@@ -76,7 +85,8 @@ class JoinRequestState:
                 Text(self.display, msg, 60, 120 + i*60, color).draw()
 
         if self.selected_game:
-            self.components['button_join'].draw()
+            self.components['button_accept'].draw()
+            self.components['button_reject'].draw()
 
         self.components['button_menu'].draw()
         self.components['label_title'].draw('title', center=True)
@@ -103,6 +113,7 @@ class JoinRequestState:
             
             if recv_msg:
                 if recv_msg.get('status') == "ok":
+                    self.list_request.remove(self.selected_game)
                     self.cleanup()
                 elif recv_msg.get('status') == "error":
                     self.info_msg = ''
@@ -110,6 +121,10 @@ class JoinRequestState:
                 
         except (ConnectionError) as e:
             print(f"Errore di connessione: {str(e)}")
+    
+    def send_reject_joint_request(self):
+        self.list_request.remove(self.selected_game)
+        self.cleanup()
         
 
     def get_selected_game_id(self):

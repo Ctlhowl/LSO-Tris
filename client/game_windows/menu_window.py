@@ -34,8 +34,12 @@ class MenuState:
         self.render()
 
     def handle_event(self, event):
+         if event.type == pygame.QUIT:
+            self.cleanup()
+            self.game_state_manager.set_state('quit')
+            return
+         
          if event.type == pygame.MOUSEBUTTONDOWN:
-
             # Gestione click voci menu
             if self.components['button_new_game'].is_clicked(event):
                 self.send_create_game_request()
