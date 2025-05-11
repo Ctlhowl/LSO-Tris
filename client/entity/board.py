@@ -2,7 +2,6 @@ import pygame
 from config .settings import *
 
 class Board:
-
     def __init__(self, screen):
         self.screen = screen
         self.board = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
