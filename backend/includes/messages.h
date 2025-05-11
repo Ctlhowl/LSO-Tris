@@ -28,7 +28,7 @@ bool send_broadcast(server_t* server, const char* event_type, json_t* data, cons
  * Invia un messaggio ad uno specifico player.
  * Ritorna true se il messaggio è stato inviato correttamente, false altrimenti.
  */
-bool send_to_player(server_t* server, json_t* json_data, const char* username);
+bool send_to_player(server_t* server, json_t* json_data, const char* username, bool already_locked);
 
 /**
  * Invia un messaggio Json aggiungendo un delimitatore di fine (come \n) assicurandosi che l'intero messaggio venga inviato

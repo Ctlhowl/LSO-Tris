@@ -60,28 +60,25 @@ bool send_all_bytes(const int sock, const void* msg, const size_t length) {
  * Ritorna true se il messaggio è stato inviato correttamente ad entrambi i giocatori, false altrimenti.
  */
 bool send_game_update(server_t* server, game_t* game, const char* username){
-    json_t* response = json_object();
-    json_t* request = json_object();
-
-    json_t* game_param = create_json(server, game->id);
-
-    pthread_mutex_lock(&server->games_mutex);
-
+    json_t* response;
+    json_t* request;
+    
+    pthread_mutex_lock(&server->games_mutex);    
     if(game->state == GAME_ONGOING){
-       response = create_response("game_move", true, "La partita è ancora in corso", game_param);
-       request = create_request("game_update", "La partita è ancora in corso", game_param);
+       response = create_response("game_move", true, "La partita è ancora in corso", create_json(server, game->id, true));
+       request = create_request("game_update", "La partita è ancora in corso", create_json(server, game->id, true));
 
     } else if(game->state == GAME_OVER){
         ssize_t owner = find_client_by_username(server, game->player1);
-        send_broadcast(server, "game_ended", game_param, owner , -1);
+        send_broadcast(server, "game_ended", create_json(server, game->id, true), owner , -1);
 
         if(game->winner[0] == '\0'){
-            response = create_response("game_move", true, "Partita finita con pareggio", game_param);
-            request = create_request("game_update", "Partita finita con pareggio", game_param);
+            response = create_response("game_move", true, "Partita finita con pareggio", create_json(server, game->id, true));
+            request = create_request("game_update", "Partita finita con pareggio", create_json(server, game->id, true));
         
         }else{
-            response = create_response("game_move", true, "Partita finita con vincitore", game_param);   
-            request = create_request("game_update", "Partita finita con vincitore", game_param);
+            response = create_response("game_move", true, "Partita finita con vincitore", create_json(server, game->id, true));   
+            request = create_request("game_update", "Partita finita con vincitore", create_json(server, game->id, true));
         }
     }
         
@@ -99,6 +96,9 @@ bool send_game_update(server_t* server, game_t* game, const char* username){
         sendedToPlayer2 = send_json_message(response, sock_client2);
     }
     
+    json_decref(request);
+    json_decref(response);
+
     if(sendedToPlayer1 && sendedToPlayer2){
         pthread_mutex_unlock(&server->games_mutex);
         printf("[Info - messages.send_game_update] I dati di aggiornamento della partita sono stati inviati correttamente\n");
@@ -127,8 +127,6 @@ bool send_broadcast(server_t* server, const char* event_type, json_t* data, cons
     while (current) {
         ssize_t sock = current->client.socket;
 
-
-        
         bool exclude = (sock == exclude_client1) || (exclude_client2 != -1 && sock == exclude_client2);
 
         if (!exclude) {
@@ -147,10 +145,10 @@ bool send_broadcast(server_t* server, const char* event_type, json_t* data, cons
  * Invia un messaggio ad uno specifico player.
  * Ritorna true se il messaggio è stato inviato correttamente, false altrimenti.
  */
-bool send_to_player(server_t* server, json_t* json_data, const char* username) {
+bool send_to_player(server_t* server, json_t* json_data, const char* username, bool already_locked) {
     if (!username || !json_data) return false;
 
-    pthread_mutex_lock(&server->clients_mutex);
+    if (!already_locked) pthread_mutex_lock(&server->clients_mutex);
     
     client_node_t* current = connected_clients->head;
     while (current) {
@@ -159,7 +157,7 @@ bool send_to_player(server_t* server, json_t* json_data, const char* username) {
             if (!send_json_message(json_data, sock)) {
                 printf("[Errore - messages.send_to_player] Invio messaggio al player %s fallito\n", username);
 
-                pthread_mutex_unlock(&server->clients_mutex);
+                if (!already_locked) pthread_mutex_unlock(&server->clients_mutex);
                 free(json_data);
                 return false;
             }
@@ -169,7 +167,7 @@ bool send_to_player(server_t* server, json_t* json_data, const char* username) {
         current = current->next;
     }
     
-    pthread_mutex_unlock(&server->clients_mutex);
+    if (!already_locked) pthread_mutex_unlock(&server->clients_mutex);
     free(json_data);
 
     printf("[Info - messages.send_to_player] Invio messaggio al player %s riuscito\n", username);

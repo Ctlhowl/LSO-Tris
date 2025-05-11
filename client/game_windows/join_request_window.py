@@ -113,7 +113,7 @@ class JoinRequestState:
             
             if recv_msg:
                 if recv_msg.get('status') == "ok":
-                    self.list_request.remove(self.selected_game)
+                    self.list_request[:] = [game  for game in self.list_request if game.get("game_id") != self.selected_game['game_id']]
                     self.cleanup()
                 elif recv_msg.get('status') == "error":
                     self.info_msg = ''

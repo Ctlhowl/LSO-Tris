@@ -39,7 +39,6 @@ void client_cleanup(server_t* server) {
     client_node_t* current = connected_clients->head;
     while (current) {
         client_node_t* next = current->next;
-        free(current->client.username);
         free(current);
         current = next;
     }
@@ -79,6 +78,7 @@ bool client_add(server_t* server, const client_t* client) {
     connected_clients->head = new_node;
     connected_clients->count++;
     
+
     printf("[Info - client.client_add] Nuovo client connesso: %s (socket %ld)\n", client->username, client->socket);
     pthread_mutex_unlock(&server->clients_mutex);
     return true;

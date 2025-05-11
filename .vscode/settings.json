@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "jansson_config.h": "c",
+        "server.h": "c"
+    }
+}

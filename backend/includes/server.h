@@ -6,8 +6,8 @@
 #include <sys/socket.h>
 #include <stdbool.h>
 
-#define MAX_CLIENTS 100
-#define MAX_GAMES 50
+#define MAX_CLIENTS 20
+#define MAX_GAMES 10
 #define DEFAULT_PORT 8080
 #define DISCONNECT_MESSAGE "!DISCONNECT"
 

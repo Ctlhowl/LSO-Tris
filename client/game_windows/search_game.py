@@ -152,3 +152,7 @@ class SearchGameState:
             game_id_to_remove = msg.get("data").get("game_id") 
             self.list_games = list(filter(lambda game: game.get("game_id") != game_id_to_remove, self.list_games))
             self.list_games.append(msg.get("data"))
+
+        if msg.get('event') == "game_removed":
+            game_id_to_remove = msg.get("data").get("game_id") 
+            self.list_games = list(filter(lambda game: game.get("game_id") != game_id_to_remove, self.list_games))

@@ -108,8 +108,8 @@ const char* game_state_to_string(game_state_t state) {
  * Verifica se l'avversario è ancora disponibile per giocare la partita.
  * Ritorna true se è ancora disponibile, false altrimenti
  */
-bool is_opponent_available(server_t* server, const char* player2){
-    pthread_mutex_lock(&server->games_mutex);
+bool is_opponent_available(server_t* server, const char* player2, bool already_locked){
+    if (!already_locked) pthread_mutex_lock(&server->games_mutex);
 
     game_node_t *curr = game_list->head;
     
@@ -119,14 +119,14 @@ bool is_opponent_available(server_t* server, const char* player2){
             if(strcmp(game.player1, player2) == 0 || strcmp(game.player2, player2) == 0){
                 printf("[Info - game.is_opponent_available] %s è gia impegnato in un'altra partita\n", player2);
                 
-                pthread_mutex_unlock(&server->games_mutex);
+                if (!already_locked) pthread_mutex_unlock(&server->games_mutex);
                 return false;
             }
         }
         curr = curr->next;
     }
 
-    pthread_mutex_unlock(&server->games_mutex);
+    if (!already_locked) pthread_mutex_unlock(&server->games_mutex);
     return true;
 }
 
@@ -173,37 +173,6 @@ short check_tris(game_t* game){
     }
 
     return -1;  // Continua a giocare
-}
-
-/**
- * Reimposta i dati della partita a seconda del parametro choice.
- * Choice = 3:
- * Choice = 2: 
- */
-void reset_game(server_t* server, game_t* game, unsigned short choice){
-    pthread_mutex_lock(&server->games_mutex);
-
-    if(choice == 3){
-        memset(game->board,0,sizeof(game->board));
-        strncpy(game->turn, game->player1, sizeof(game->turn));
-        game->state = GAME_ONGOING;
-        game->winner[0] = '\0';
-        game->rematch = 0;
-        pthread_mutex_unlock(&server->games_mutex);
-        return;
-    }
-
-    if(choice == 2){
-        strncpy(game->player1, game->player2, sizeof(game->player1));
-    }
-
-    game->player2[0] = '\0';
-    memset(game->board,0,sizeof(game->board));
-    strncpy(game->turn, game->player1, sizeof(game->turn));
-    game->state = GAME_WAITING;
-    game->winner[0] = '\0';
-    game->rematch = 0;
-    pthread_mutex_unlock(&server->games_mutex);
 }
 
 //============ INTERFACCIA PUBBLICA ==================//
@@ -266,50 +235,25 @@ ssize_t create_game(server_t* server, const char* player1) {
         pthread_mutex_unlock(&server->games_mutex);
         return -1;
     }
-    pthread_mutex_unlock(&server->games_mutex);
 
+    pthread_mutex_unlock(&server->games_mutex);
     if(!game_add(server, new_game)){
+        free(new_game);
         return -1;
     }
+
+    ssize_t id = new_game->id;
+    free(new_game);
     
-    return new_game->id;
+    return id;
 }
 
 /**
- * Rimuove la partita dalla lista di partite disponibili nel server.
- * Ritorna true se la partita è stata rimossa correttamente, false altrimenti 
- */
-bool remove_game(server_t* server, size_t game_id) {
-    pthread_mutex_lock(&server->games_mutex);
-    
-    game_node_t** pp = &game_list->head;
-    game_node_t* current = game_list->head;
-    
-    while (current) {
-        if (current->game.id == game_id) {
-            *pp = current->next;
-            
-            printf("[Info - game.remove_game] La partita con id %ld è terminata)\n", game_id);
-            free(current);
-
-            game_list->count--;
-
-            pthread_mutex_unlock(&server->games_mutex);
-            return true;
-        }
-        pp = &current->next;
-        current = current->next;
-    }
-    
-    pthread_mutex_unlock(&server->games_mutex);
-
-    printf("[Errore - game.remove_game] La partita con id %ld non esiste\n", game_id);
-    return false;
-}
-
-/**
- * Invia al creatore della partita la richiesta di join da parte di un utente per una determinata partita.
- * Ritorna 0 se la richiesta è avvenuta con successo, -1 se game_id non è valido, -2 se la partita non è più disponibile
+ * Invia al creatore della partita la richiesta di join da parte di un utente per una determinata partita. Ritorna:
+ * - 0 se la richiesta è avvenuta con successo,
+ * - -1 se game_id non è valido,
+ * - -2 se la partita non è più disponibile
+ * - -3 la partita è già stata avviata
  */
 short request_join_game(server_t* server, size_t game_id, const char *player2) {
     if (game_id >= game_list->count) {
@@ -324,20 +268,29 @@ short request_join_game(server_t* server, size_t game_id, const char *player2) {
         if(curr->game.id == game_id){
 
             // Verifica che la partita sia in stato di "attesa"
-            if (curr->game.state != GAME_WAITING) {
+            if (curr->game.state == GAME_OVER) {
                 pthread_mutex_unlock(&server->games_mutex);
                 
                 printf("[Errore - game.request_join_game] La parita non esiste più\n");
                 return -2;
             }
 
+            if (curr->game.state == GAME_ONGOING) {
+                pthread_mutex_unlock(&server->games_mutex);
+                
+                printf("[Errore - game.request_join_game] La parita è gia stata avviata più\n");
+                return -3;
+            }
+
             // Invia la richiesta di join al creatore della partita (player1)
-            json_t *data = json_object();
+            json_t* data = json_object();
             json_object_set_new(data, "game_id", json_integer(game_id));
             json_object_set_new(data, "player2", json_string(player2));
-
-            send_to_player(server, create_request("join_request", "Nuova richiesta di join", data), curr->game.player1);
-
+            
+            json_t* request = create_request("join_request", "Nuova richiesta di join", data);
+            send_to_player(server, request, curr->game.player1, true);
+            
+            json_decref(request);
             pthread_mutex_unlock(&server->games_mutex);
             return 0;
         }
@@ -375,12 +328,9 @@ short accept_join_request(server_t* server, size_t game_id, const char *player2)
                 printf("[Errore - game.accept_join_request] La parita non esiste più\n");
                 return -2;
             }
-            
-            pthread_mutex_unlock(&server->games_mutex);
-
 
             // Verifico se l'avversario é impegnato in un'altra partita
-            if(!is_opponent_available(server, player2)){
+            if(!is_opponent_available(server, player2, true)){
                 printf("[Errore - game.accept_join_request] Avversario impegnato in un'altra partita\n");
                 return -4; 
             }
@@ -388,13 +338,18 @@ short accept_join_request(server_t* server, size_t game_id, const char *player2)
             // Aggiungi il secondo giocatore alla partita
             strncpy(game->player2, player2, sizeof(game->player2) - 1);
             game->state = GAME_ONGOING;
-
-            json_t* data = create_json(server, game->id);
             
              // Notifica l'avversario che la partita sta stata accettata con successo e che può essere avviata
-            send_to_player(server, create_request("accept_join", "Richiesta accettata", NULL), curr->game.player2);
-            send_to_player(server, create_request("game_started", "La partita sta per cominciare", data), curr->game.player2);
+            json_t* request = create_request("accept_join", "Richiesta accettata", NULL);
+            send_to_player(server, request, curr->game.player2, true);
+            json_decref(request);
 
+            json_t* data = create_json(server, game->id, true);
+            request = create_request("game_started", "La partita sta per cominciare", data);
+            send_to_player(server, request, curr->game.player2, true);
+
+            json_decref(request);
+            pthread_mutex_unlock(&server->games_mutex);
             return 0;
         }
 
@@ -480,11 +435,11 @@ game_t* find_game_by_id(server_t* server,size_t game_id){
 /**
  * Serializza la struttura game_t in json
  */
-json_t* create_json(server_t* server, size_t id){
+json_t* create_json(server_t* server, size_t id, bool already_locked){
     json_t* msg = json_object();
     if (!msg) return NULL;
     
-    pthread_mutex_lock(&server->games_mutex);
+    if(!already_locked) pthread_mutex_lock(&server->games_mutex);
     
     game_node_t* current = game_list->head;
     game_t* found_game = NULL;
@@ -500,7 +455,8 @@ json_t* create_json(server_t* server, size_t id){
     }
     
     if (!found_game) {
-        pthread_mutex_unlock(&server->games_mutex);
+        if(!already_locked) pthread_mutex_unlock(&server->games_mutex);
+        json_decref(msg);
         return NULL;
     }
     
@@ -516,16 +472,18 @@ json_t* create_json(server_t* server, size_t id){
     }
     
     // Serializzazione board
-    json_t *json_board = json_array();
+    json_t* json_board = json_array();
     if (!json_board){
-        pthread_mutex_unlock(&server->games_mutex);
+        if(!already_locked) pthread_mutex_unlock(&server->games_mutex);
+        json_decref(msg);
         return NULL;
     }
     
     for (int i = 0; i < 3; i++) {
         json_t *row = json_array();
         if (!row){
-            pthread_mutex_unlock(&server->games_mutex);
+            if(!already_locked) pthread_mutex_unlock(&server->games_mutex);
+            json_decref(msg);
             return NULL;
         }
         
@@ -534,7 +492,8 @@ json_t* create_json(server_t* server, size_t id){
             json_t* cell_json = json_string(cell);
             if (!cell_json || json_array_append_new(row, cell_json) != 0) {
                 if (cell_json){
-                    pthread_mutex_unlock(&server->games_mutex);
+                    if(!already_locked) pthread_mutex_unlock(&server->games_mutex);
+                    json_decref(msg);
                     return NULL;
                 }
             }
@@ -555,36 +514,45 @@ json_t* create_json(server_t* server, size_t id){
         json_object_set_new(msg, "winner", json_null());
     }
     
-    pthread_mutex_unlock(&server->games_mutex);
+    if(!already_locked) pthread_mutex_unlock(&server->games_mutex);
     return msg;
 }
 
 /**
  * Ritorna un json con tutte le partite create da un giocatore, altrimenti NULL
  */
-json_t* list_games(server_t* server, const char* username){
+json_t* list_games(server_t* server, const char* username) {
+     if (!username) return NULL;
+
     json_t* games = json_array();
+    if (!games) return NULL;
+
     pthread_mutex_lock(&server->games_mutex);
 
     game_node_t* current = game_list->head;
-
-    while(current){
-        if(strcmp(current->game.player1,username) != 0){
-            pthread_mutex_unlock(&server->games_mutex);
-            
-            json_t* game = create_json(server,current->game.id);
-            json_array_append_new(games,game);
+    while (current) {
+       // Crea una copia dei dati necessari prima di rilasciare il mutex
+        size_t game_id = current->game.id;
+        char player1[64];
+        strncpy(player1, current->game.player1, sizeof(player1));
+        player1[sizeof(player1)-1] = '\0';
+        
+        // Rilascia temporaneamente il mutex per chiamare create_json
+        pthread_mutex_unlock(&server->games_mutex);
+        
+        if (strcmp(player1, username) != 0) {
+            json_t* game = create_json(server, game_id, false);
+            if (game) {
+                json_array_append_new(games, game);
+            }
         }
-
+        
+        // Riprendi il lock per la prossima iterazione
+        pthread_mutex_lock(&server->games_mutex);
         current = current->next;
     }
 
     pthread_mutex_unlock(&server->games_mutex);
-
-    if(!games){
-        return NULL;
-    }
-
     return games;
 }
 
@@ -610,63 +578,68 @@ short quit(server_t* server, game_t* game, const char* username){
         strncpy(game->winner, game->player1, 63); // Imposta il vincitore
     }
 
+    json_t* request = create_request("quit", "L'avversario ha abbandonato", create_json(server, game->id, true));
 
-    pthread_mutex_unlock(&server->games_mutex);
-
-    if(!send_to_player(server, create_request("quit", "L'avversario ha abbandonato", create_json(server, game->id)), game->winner)){
+    if(!send_to_player(server, request, game->winner, true)){
 
         // Nel caso di errore dell'invio reimposta lo stato della partita
-        pthread_mutex_lock(&server->games_mutex);
-
         game->state = GAME_ONGOING;
         game->winner[0] = '\0';
 
+        json_decref(request);
         pthread_mutex_unlock(&server->games_mutex);
         return -2;
     }
 
+    pthread_mutex_unlock(&server->games_mutex);
+    json_decref(request);
     return 0;
 }
 
 /**
- * Gestione del rematch. Ritorna:
- * - 0 c'è un vincitore e vuole rigiocare
- * - 1 pareggio ed entrambi vogliono giocare
- * - 2 se si sta aspettando la risposta dall'avversario
+ * Rimuove tutte le partite associate ad un giocatore
  */
-short rematch(server_t* server, game_t* game, const char* username){
+void remove_games_by_username(server_t* server, const char* username, const size_t sock){
     pthread_mutex_lock(&server->games_mutex);
+     
+    game_node_t** pp = &game_list->head;
+    game_node_t* current = game_list->head;
+    game_node_t* to_free = NULL;
+    
+    int counter = 0;
+    size_t id[MAX_GAMES] = {0};
 
-    bool is_player1 = strcmp(game->player1, username) == 0;
-    bool is_player2 = strcmp(game->player2, username) == 0;
-
-    if(is_player1){
-        game->rematch |= 1;
-    }else if (is_player2){
-        game->rematch |= 2;
-    }
-
-    if(strlen(game->winner) == 0){ //Terminata in pareggio
-        if(game->rematch == 3){
-            pthread_mutex_unlock(&server->games_mutex);
-            reset_game(server,game,3);
-            return 1;
+    while (current) {
+        if (strcmp(current->game.player1, username) == 0) {
+            // Save the ID before freeing
+            id[counter++] = current->game.id;
+            
+            // Unlink the node
+            to_free = current;
+            *pp = current->next;
+            current = current->next;  // Move to next before freeing
+            
+            // Free the node safely
+            memset(&to_free->game, 0, sizeof(game_t));
+            free(to_free);
+            to_free = NULL;
+            
+            game_list->count--;
+        } else {
+            // Only advance pp if we didn't delete
+            pp = &current->next;
+            current = current->next;
         }
-        
-        pthread_mutex_unlock(&server->games_mutex);
-
-        pthread_t tid;
-        timeout_args_t *args = malloc(sizeof(timeout_args_t));
-        args->game = game;
-        args->server = server;
-        strncpy(args->username, username, sizeof(args->username));
-
-        pthread_create(&tid, NULL, rematch_timeout, args);
-        pthread_detach(tid);
-        return 2; //In attesa della risposta dell'altro player
     }
 
     pthread_mutex_unlock(&server->games_mutex);
-    reset_game(server,game,game->rematch);
-    return 0;
+
+    // Broadcast removed games
+    for (int i = 0; i < counter; i++) {
+        json_t* msg = json_object();
+        json_object_set_new(msg, "game_id", json_integer(id[i]));
+
+        send_broadcast(server, "game_removed", msg, sock, -1);
+        json_decref(msg);
+    }
 }

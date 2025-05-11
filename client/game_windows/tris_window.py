@@ -25,7 +25,7 @@ class TrisState:
         # Inizializzazione componenti ui
         self.components = {
             'button_quit': Button(self.display, "Abbandona", (WIDTH //2 - 150), (HEIGHT - 100), 300, 50, PRIMARY_COLOR, SECONDARY_COLOR, TEXT_COLOR, Text.get_font('large')),
-            'button_rematch': Button(self.display, "Rivincita", (WIDTH //2 - 150), 100, 300, 50, PRIMARY_COLOR, SECONDARY_COLOR, TEXT_COLOR, Text.get_font('large')),
+            'button_menu': Button(self.display, "Torna al menu", (WIDTH //2 - 150), (HEIGHT - 100), 300, 50, PRIMARY_COLOR, SECONDARY_COLOR, TEXT_COLOR, Text.get_font('large')),
             'label_title': Text(self.display, self.title, WIDTH // 2, 50),
             'label_info': Text(self.display, '',  WIDTH // 2, HEIGHT - 160, TEXT_SUCCESS_COLOR),
             'label_error': Text(self.display, '',  WIDTH // 2, HEIGHT - 160, TEXT_ERROR_COLOR),
@@ -47,8 +47,13 @@ class TrisState:
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             # Ritorno al menu
-            if self.components['button_quit'].is_clicked(event):
+            if self.components['button_quit'].is_clicked(event) and self.state != "GAME_OVER":
                 self.quit()
+                return
+
+            if self.components['button_menu'].is_clicked(event) and self.state == "GAME_OVER":
+                self.cleanup()
+                self.game_state_manager.set_state("menu")
                 return
 
             current_pos = pygame.mouse.get_pos()
@@ -74,7 +79,7 @@ class TrisState:
             self.components['label_info'].draw(center=True)
         
         if self.state == "GAME_OVER":
-            self.components['button_rematch'].draw()
+            self.components['button_menu'].draw()
 
 
         self.draw_board()
@@ -201,3 +206,4 @@ class TrisState:
             else:
                 self.info_msg = "Pareggio"
                 self.error_msg = ''
+        

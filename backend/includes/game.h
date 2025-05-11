@@ -56,12 +56,6 @@ void game_cleanup(server_t* server);
 ssize_t create_game(server_t* server, const char* player1);
 
 /**
- * Rimuove la partita dalla lista di partite disponibili nel server.
- * Ritorna true se la partita è stata rimossa correttamente, false altrimenti 
- */
-bool remove_game(server_t* server, size_t game_id);
-
-/**
  * Invia al creatore della partita la richiesta di join da parte di un utente per una determinata partita.
  * Ritorna 0 se la richiesta è avvenuta con successo, -1 se game_id non è valido, -2 se la partita non è più disponibile
  */
@@ -89,7 +83,7 @@ game_t* find_game_by_id(server_t* server,size_t game_id);
 /**
  * Serializza la struttura game_t in json
  */
-json_t* create_json(server_t* server, size_t id);
+json_t* create_json(server_t* server, size_t id, bool already_locked);
 
 /**
  * Ritorna un json con tutte le partite create da un giocatore, altrimenti NULL
@@ -102,4 +96,9 @@ json_t* list_games(server_t* server, const char* username);
  * Ritorna 0 se lo stato della partita e l'invio della notifica vanno a buon fine, -1 se la partita non è in corso, -2 errore invio notifica
  */
 short quit(server_t* server, game_t* game, const char* username);
+
+/**
+ * Rimuove tutte le partite associate ad un giocatore
+ */
+void remove_games_by_username(server_t* server, const char* username, const size_t sock);
 #endif

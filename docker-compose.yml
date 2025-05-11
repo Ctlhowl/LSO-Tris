@@ -1,0 +1,28 @@
+services:
+  server:
+    build:
+      context: ./backend
+    ports:
+      - "8080:8080"
+    networks:
+      - tris-network
+    restart: unless-stopped
+
+  client:
+    build:
+      context: ./client
+    depends_on:
+      - server
+    environment:
+      - DISPLAY=${DISPLAY}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ${XAUTHORITY}:/root/.Xauthority
+    network_mode: host
+    devices:
+      - /dev/snd
+    restart: unless-stopped
+
+networks:
+  tris-network:
+    driver: bridge

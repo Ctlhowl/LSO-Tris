@@ -82,7 +82,9 @@ class MenuState:
                 
             print(recv_msg)
             if recv_msg.get('status') == "ok":
-                self.info_msg = recv_msg.get('description')
+                game_id = recv_msg.get('data').get('game_id')
+
+                self.info_msg = recv_msg.get('description') + ', ID partita: ' + str(game_id)
                 self.error_msg = ''
             elif recv_msg.get('status') == "error":
                 self.info_msg = ''
