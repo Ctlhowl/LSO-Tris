@@ -7,12 +7,6 @@ Tecnologie usate:
 - **Python/Pygame client** (interfaccia grafica)
 - **Docker Compose** per il deployment
 
-## Table of Contents
-- [📋 Requisiti](#requisiti)
-- [🚀 Avvio Rapido](#avvio-rapido)
-- [🛠️ Comandi Utili](#comandi-utili)
-- [📜 Licenza](#licenza)
-
 ## 📋 Requisiti 
 - Docker Engine - Community ([Install guide](https://docs.docker.com/engine/install/))
 - Docker Compose v2 (verifica la versione con `docker compose version`)
