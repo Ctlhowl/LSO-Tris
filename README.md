@@ -12,7 +12,7 @@ Tecnologie usate:
 - Docker Compose v2 (verifica la versione con `docker compose version`)
 - X11 server (per la GUI su Linux)
  
-**Nota per Linux::**
+**Nota per Linux:**
 Abilita X11 forwarding prima di avviare:
 ```bash
 xhost +local:docker
@@ -20,7 +20,7 @@ echo $DISPLAY
 ```
 Dovresti vedere `:0` o simile (es. `:1`)
 
-**Nota per Windows**
+**Nota per Windows:**
 1. **Installare VcXsrv (Server X)**
 	1. **Scarica e installa VcXsrv:**
 		- Vai su https://sourceforge.net/projects/vcxsrv/ e scarica l'ultima versione di VcXsrv.
