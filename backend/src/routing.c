@@ -232,12 +232,15 @@ void handle_accept_join(server_t* server, const int client_sock, const json_t* d
             response = create_response("accept_join", false ,"Avversario impegnato in un'altra partita", NULL);
             send_json_message(response, client_sock);
             break;
+        case -5:
+            response = create_response("accept_join", false ,"Impossibile accettare la richiesta,causa disconnessione del player", NULL);
+            send_json_message(response, client_sock);
+            break;
         default:
             response = create_response("accept_join", false ,"Errore interno al server", NULL);
             send_json_message(response, client_sock);
             break;
     }
-
 
     json_decref(response);
     json_decref(game_json);

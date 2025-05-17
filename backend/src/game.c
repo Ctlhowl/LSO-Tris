@@ -315,6 +315,11 @@ short accept_join_request(server_t* server, size_t game_id, const char *player2)
         return -1;
     }
 
+    if(find_client_by_username(server,player2) == -1){
+        return -5;
+        printf("[Errore - game.accept_join_request] Player disconnesso\n");
+    }
+
     pthread_mutex_lock(&server->games_mutex);
     game_node_t *curr = game_list->head;
     

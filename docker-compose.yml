@@ -19,10 +19,10 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix
       - ${XAUTHORITY}:/root/.Xauthority
     network_mode: host
-    devices:
-      - /dev/snd
-    restart: unless-stopped
 
 networks:
   tris-network:
     driver: bridge
+
+
+    
