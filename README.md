@@ -41,7 +41,7 @@ git clone git@github.com:Ctlhowl/LSO-Tris.git
 cd LSO-Tris
 
 # Build ed esecuzione di docker compose
-docker compose up --build
+sudo docker compose up --build
 ```
 
 > Verranno avviati:
@@ -52,7 +52,7 @@ docker compose up --build
 
 
 ```bash
-docker compose up --build --scale client=3
+sudo docker compose up --build --scale client=3
 ```
 > Verranno avviati:
 > 
@@ -63,7 +63,7 @@ docker compose up --build --scale client=3
 ## 🛠️ Comandi Utili
 |Comando|Descrizione|
 |---|---|
-|`docker compose up -d server`|Avvia solo il server in background|
-|`docker compose run client`|Avvia un client aggiuntivo manualmente|
-|`docker compose logs -f server`|Monitora i log del server|
-|`docker compose down --volumes`|Ferma tutto e cancella i dati|
+|`sudo docker compose up -d server`|Avvia solo il server in background|
+|`sudo docker compose run client`|Avvia un client aggiuntivo manualmente|
+|`sudo docker compose logs -f server`|Monitora i log del server|
+|`sudo docker compose down --volumes`|Ferma tutto e cancella i dati|
